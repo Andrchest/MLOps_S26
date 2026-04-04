@@ -23,3 +23,10 @@
 - [ ] Code passes `pre-commit` hooks (Black, Flake8)
 - [ ] Documentation updated (if applicable)
 - [ ] No sensitive data (secrets, API keys) included in commits
+
+# Enforce Conventional Commits standard for commit messages
+- repo: https://github.com/commitizen-tools/commitizen
+rev: v3.12.0
+hooks:
+  - id: commitizen
+    stages: [commit-msg]
