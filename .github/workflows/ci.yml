@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "**" ]
   pull_request:
     branches: [ "main", "dev" ]
 
@@ -30,7 +30,6 @@ jobs:
       - name: Lint code with Flake8
         run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      # Uncomment the following lines when tests are added to the /tests directory
       # - name: Run PyTest
       #   run: pytest tests/
 
@@ -38,6 +37,7 @@ jobs:
     name: Test Docker Builds
     runs-on: ubuntu-latest
     needs: lint-and-test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     strategy:
       matrix:
         service:
