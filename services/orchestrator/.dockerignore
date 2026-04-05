@@ -1,0 +1,25 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*~
+*.so
+.Python
+.venv/
+venv/
+env/
+pip-log.txt
+
+# Environment variables
+.env
+
+# IDEs
+.idea/
+.vscode/
+
+# CI/CD and local hooks
+.pre-commit-config.yaml
+.github/
