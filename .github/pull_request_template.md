@@ -30,3 +30,10 @@ rev: v3.12.0
 hooks:
   - id: commitizen
     stages: [commit-msg]
+
+# Secrets Protection
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.4.0
+  hooks:
+    - id: detect-secrets
+      args: ['--baseline', '.secrets.baseline']
