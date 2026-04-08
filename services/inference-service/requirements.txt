@@ -9,3 +9,6 @@ pandas
 scikit-learn
 numpy
 requests
+pandas
+joblib
+uvicorn
