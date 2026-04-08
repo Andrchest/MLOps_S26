@@ -1,7 +1,5 @@
 import json
-
 from fastapi import FastAPI
-from datetime import datetime, timezone
 import uuid
 import asyncio
 import asyncpg
@@ -31,9 +29,13 @@ def predict_label(data):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model_executor, db_pool
-    model_executor = ProcessPoolExecutor(max_workers=4, initializer=init_worker, initargs=(model_path,))
+    model_executor = ProcessPoolExecutor(
+        max_workers=4, initializer=init_worker, initargs=(model_path,)
+    )
 
-    db_pool = await asyncpg.create_pool(user="postgres", password="1234", database="MLOPS", host="localhost", port=5432)
+    db_pool = await asyncpg.create_pool(
+        user="postgres", password="1234", database="MLOPS", host="localhost", port=5432
+    )
 
     yield
 
@@ -54,9 +56,7 @@ async def reload():
     global model_executor
     async with reload_lock:
         new_executor = ProcessPoolExecutor(
-            max_workers=4,
-            initializer=init_worker,
-            initargs=(model_path,)
+            max_workers=4, initializer=init_worker, initargs=(model_path,)
         )
         old_executor = model_executor
         model_executor = new_executor
@@ -65,10 +65,7 @@ async def reload():
         # Background task to close old pool executor
         loop.run_in_executor(None, old_executor.shutdown, True)
 
-        return {
-            "status": "success",
-            "message": "model reloaded and pool restarted"
-        }
+        return {"status": "success", "message": "model reloaded and pool restarted"}
 
 
 async def save_log(response: PredictResponse):
@@ -97,7 +94,7 @@ async def save_log(response: PredictResponse):
                 json.dumps(response.input_data.model_dump()),
                 json.dumps(response.prediction.model_dump()),
                 response.latency_ms,
-                response.status
+                response.status,
             )
         print("SAVED: ", response.request_id)
     except Exception as e:
@@ -111,9 +108,7 @@ async def predict(input_data: InputData):
     try:
         loop = asyncio.get_running_loop()
         label, score = await loop.run_in_executor(
-            model_executor,
-            predict_label,
-            input_data.model_dump()
+            model_executor, predict_label, input_data.model_dump()
         )
 
         prediction = Prediction(label=label, score=score)
@@ -133,10 +128,8 @@ async def predict(input_data: InputData):
         input_data=input_data,
         prediction=prediction,
         latency_ms=latency,
-        status=status
+        status=status,
     )
-
-
     asyncio.create_task(save_log(response))
 
     return response
