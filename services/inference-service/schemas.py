@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 class InputData(BaseModel):
     age: int
@@ -11,7 +12,7 @@ class Prediction(BaseModel):
 
 class PredictResponse(BaseModel):
     request_id: str
-    timestamp: str
+    timestamp: datetime
     model_version: str
     model_name: str
     input_data: InputData
