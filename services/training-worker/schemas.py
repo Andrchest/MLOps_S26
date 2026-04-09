@@ -4,7 +4,8 @@ from typing import Any, Dict
 
 class JobData(BaseModel):
     job_id: int
-    dataset: Any
+    dataset_name: str
+    dataset_id: int
     status: str
 
 

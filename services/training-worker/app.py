@@ -4,6 +4,9 @@ import io
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import asyncpg
+from minio_client import load_dataset
+import asyncio
+from sklearn.dummy import DummyClassifier
 
 
 @asynccontextmanager
@@ -18,17 +21,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-
 # while True:
 #     print("worker polling...")
 #     time.sleep(5)
 
+global db_pool
+
 
 async def get_job(job_id: int):
-    global db_pool
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT job_id, dataset FROM jobs WHERE job_id=$1", job_id
+            """
+            SELECT job_id, dataset_name, dataset_id
+            FROM jobs
+            WHERE job_id=$1 AND status='pending'
+            """,
+            job_id
         )
         return row
 
@@ -49,3 +57,4 @@ async def save_trained_model(job_id: int, model, model_name: str, model_version:
             model_version,
             model_bytes,
         )
+
