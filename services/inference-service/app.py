@@ -1,41 +1,42 @@
 import json
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 import uuid
 import asyncio
 import asyncpg
 from contextlib import asynccontextmanager
 from concurrent.futures import ProcessPoolExecutor
-from schemas import *
-from predictor import ChurnPredictor
+from schemas import InputData, Prediction, PredictResponse
+from datetime import datetime
+from predictor import Predictor
+import os
+from load_model import fetch_model_bytes, _MODEL_BYTES_CACHE
 
-model_path = "artifacts/model.joblib"
 reload_lock = asyncio.Lock()
 
 
-def init_worker(path):
-    global predictor
-    try:
-        predictor = ChurnPredictor(path)
-        print(f"Worker initialized successfully with model: {path}")
-    except Exception as e:
-        print(f"Failed to initialize worker with model {path}: {e}")
-
-
-def predict_label(data):
-    global predictor
-    return predictor.predict(data)
+def _run_prediction(model_bytes: bytes, input_dict: dict):
+    """
+    Helper function that runs inside the ProcessPool worker.
+    Instantiating the model here ensures it stays within the process memory.
+    """
+    predictor = Predictor(model_bytes)
+    return predictor.predict(input_dict)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model_executor, db_pool
-    model_executor = ProcessPoolExecutor(
-        max_workers=4, initializer=init_worker, initargs=(model_path,)
-    )
 
     db_pool = await asyncpg.create_pool(
-        user="postgres", password="1234", database="MLOPS", host="localhost", port=5432
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+        database=os.getenv("POSTGRES_DB"),
+        host="localhost",
+        port=5432,
     )
+
+    # Initialize Process Pool for CPU-bound scikit-learn work
+    model_executor = ProcessPoolExecutor(max_workers=4)
 
     yield
 
@@ -55,9 +56,10 @@ def health():
 async def reload():
     global model_executor
     async with reload_lock:
-        new_executor = ProcessPoolExecutor(
-            max_workers=4, initializer=init_worker, initargs=(model_path,)
-        )
+        # Clear the bytes cache in the main process
+        _MODEL_BYTES_CACHE.clear()
+
+        new_executor = ProcessPoolExecutor(max_workers=4)
         old_executor = model_executor
         model_executor = new_executor
 
@@ -65,7 +67,7 @@ async def reload():
         # Background task to close old pool executor
         loop.run_in_executor(None, old_executor.shutdown, True)
 
-        return {"status": "success", "message": "model reloaded and pool restarted"}
+        return {"status": "success"}
 
 
 async def save_log(response: PredictResponse):
@@ -101,20 +103,26 @@ async def save_log(response: PredictResponse):
         print("FAILED: ", e)
 
 
-@app.post("/predict", response_model=PredictResponse)
-async def predict(input_data: InputData):
+@app.post("/predict")
+async def predict(input_data: InputData, model_name, model_version):
     start_time = datetime.now()
 
     try:
+        model_bytes = await fetch_model_bytes(db_pool, model_name, model_version)
+
         loop = asyncio.get_running_loop()
         label, score = await loop.run_in_executor(
-            model_executor, predict_label, input_data.model_dump()
+            model_executor, _run_prediction, model_bytes, input_data.model_dump()
         )
 
         prediction = Prediction(label=label, score=score)
-        status = "success"
+        status_msg = "success"
+    except ValueError as ve:
+        # Model not found
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
     except Exception as e:
-        status = f"error: {str(e)}"
+        # Code exception
+        status_msg = f"error: {str(e)}"
         prediction = Prediction(label=0, score=0.0)
 
     # latency
@@ -123,13 +131,13 @@ async def predict(input_data: InputData):
     response = PredictResponse(
         request_id=str(uuid.uuid4()),
         timestamp=datetime.now(),
-        model_version="churn_model_v1",
-        model_name="customer_churn_model",
+        model_version=model_version,
+        model_name=model_name,
         input_data=input_data,
         prediction=prediction,
         latency_ms=latency,
-        status=status,
+        status=status_msg,
     )
     asyncio.create_task(save_log(response))
 
-    return response
+    return {"prediction": prediction}
