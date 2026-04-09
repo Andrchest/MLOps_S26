@@ -1,10 +1,11 @@
+import json
 import time
 import joblib
 import io
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import asyncpg
-from minio_client import load_dataset
+from minio_client import load_dataset, save_model_to_minio
 import asyncio
 from sklearn.dummy import DummyClassifier
 
@@ -41,20 +42,19 @@ async def get_job(job_id: int):
         return row
 
 
-async def save_trained_model(job_id: int, model, model_name: str, model_version: str):
-    buffer = io.BytesIO()
-    joblib.dump(model, buffer)
-    model_bytes = buffer.getvalue()
+async def save_trained_model(job_id: int, model, model_name: str, model_version: str, metrics, parameters):
+    model_path = save_model_to_minio(model, model_name, model_version)
 
     async with db_pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO trained_models (job_id, model_name, model_version, model)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO trained_models (job_id, model_name, model_version, model_path, metrics, parameters)
+            VALUES ($1, $2, $3, $4, $5, $6)
             """,
             job_id,
             model_name,
             model_version,
-            model_bytes,
+            model_path,
+            json.dumps(metrics),
+            json.dumps(parameters)
         )
-

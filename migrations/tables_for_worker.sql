@@ -7,10 +7,13 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 
 CREATE TABLE  IF NOT EXISTS trained_models (
-    model_id SERIAL PRIMARY KEY,
     job_id INT NOT NULL REFERENCES jobs(job_id),
     model_name TEXT NOT NULL,
     model_version TEXT NOT NULL,
-    model BYTEA NOT NULL,
-    created_at TIMESTAMP DEFAULT now()
+    model_path TEXT NOT NULL,
+    metrics JSONB NOT NULL,
+    parameters JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    UNIQUE (job_id, model_version),
+    PRIMARY KEY (job_id, model_version)
 );
