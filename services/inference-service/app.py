@@ -103,12 +103,12 @@ async def save_log(response: PredictResponse):
         print("FAILED: ", e)
 
 
-@app.post("/predict")
+@app.post("/predict", response_model=PredictResponse)
 async def predict(input_data: InputData, model_name, model_version):
     start_time = datetime.now()
 
     try:
-        model_bytes = await fetch_model_bytes(db_pool, model_name, model_version)
+        model_bytes = await fetch_model_bytes(model_name, model_version)
 
         loop = asyncio.get_running_loop()
         label, score = await loop.run_in_executor(
@@ -140,4 +140,4 @@ async def predict(input_data: InputData, model_name, model_version):
     )
     asyncio.create_task(save_log(response))
 
-    return {"prediction": prediction}
+    return response
