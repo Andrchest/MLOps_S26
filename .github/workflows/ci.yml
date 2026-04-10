@@ -44,7 +44,7 @@ jobs:
           - inference-service
           - monitoring-service
           - orchestrator
-          - training-worker
+          - training_worker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

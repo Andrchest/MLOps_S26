@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from worker import worker_loop
 
 
+# Connection to Postgres
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.db_pool = await asyncpg.create_pool(

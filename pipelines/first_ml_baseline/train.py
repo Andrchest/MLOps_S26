@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MLFLOW_EXPERIMENT,
         help=f"MLflow experiment name. Default: {DEFAULT_MLFLOW_EXPERIMENT}",
     )
+    parser.add_argument("--job_id", required=True, help="ID of the running process.")
     return parser.parse_args()
 
 
@@ -137,6 +138,7 @@ def log_to_mlflow(
     data_path: str,
     target_column: str,
     experiment_name: str,
+    job_id: str,
 ) -> str:
     mlflow.set_experiment(experiment_name)
 
@@ -148,6 +150,7 @@ def log_to_mlflow(
         mlflow.log_param("target_column", target_column)
         mlflow.log_param("data_path", data_path)
         mlflow.log_param("random_state", RANDOM_STATE)
+        mlflow.set_tag("job_id", job_id)
 
         for param_name, param_value in classifier_params.items():
             mlflow.log_param(f"model__{param_name}", param_value)
@@ -185,6 +188,7 @@ def main() -> None:
         data_path=args.data,
         target_column=args.target,
         experiment_name=args.mlflow_experiment,
+        job_id=args.job_id,
     )
 
     print("Training completed successfully.")

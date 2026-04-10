@@ -41,7 +41,7 @@ services:
       - mlflow
 
   training-worker:
-    build: ./services/training-worker
+    build: ./services/training_worker
     env_file: .env
     depends_on:
       - postgres
