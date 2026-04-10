@@ -2,7 +2,7 @@ import joblib
 import io
 import json
 
-global db_pool
+db_pool = None
 
 
 async def get_job():
