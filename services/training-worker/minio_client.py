@@ -2,20 +2,14 @@ from minio import Minio
 from io import BytesIO
 import joblib
 
-
 minio_client = Minio(
-    "minio:9000",
-    access_key="minio",
-    secret_key="minio123",
-    secure=False
+    "minio:9000", access_key="minio", secret_key="minio123", secure=False
 )
 
 
 def download_dataset(dataset_name: str, file_path: str, bucket="datasets"):
     minio_client.fget_object(
-        bucket_name=bucket,
-        object_name=dataset_name,
-        file_path=file_path
+        bucket_name=bucket, object_name=dataset_name, file_path=file_path
     )
 
 

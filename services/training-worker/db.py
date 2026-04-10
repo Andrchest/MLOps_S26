@@ -7,8 +7,7 @@ global db_pool
 
 async def get_job():
     async with db_pool.acquire() as conn:
-        return await conn.fetchrow(
-            """
+        return await conn.fetchrow("""
             UPDATE jobs
             SET status = 'Running'
             WHERE job_id = (
@@ -19,16 +18,12 @@ async def get_job():
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING job_id, dataset_name, dataset_id
-            """
-        )
+            """)
 
 
 async def update_status(job_id, status):
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE jobs SET status=$1 WHERE job_id=$2",
-            status, job_id
-        )
+        await conn.execute("UPDATE jobs SET status=$1 WHERE job_id=$2", status, job_id)
 
 
 async def save_trained_model(

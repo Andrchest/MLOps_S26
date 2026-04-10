@@ -19,7 +19,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-
 RANDOM_STATE = 42
 DEFAULT_TARGET_COLUMN = "target"
 DEFAULT_ARTIFACTS_DIR = Path("artifacts")
