@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-import asyncpg
 
 app = FastAPI()
 
@@ -21,7 +20,8 @@ async def train(dataset_name: str, dataset_id: int):
             VALUES ($1, $2, 'pending')
             RETURNING job_id
             """,
-            dataset_name, dataset_id
+            dataset_name,
+            dataset_id,
         )
 
         return f"job_id: {job_id}"
@@ -36,18 +36,12 @@ async def gut_status(job_id: int):
             from jobs
             WHERE job_id = $1
             """,
-            job_id
+            job_id,
         )
 
         return f"status: {status}"
 
 
 @app.post("/datasets")
-async def register_dataset():
-    async with db_pool.acqure() as conn:
-        reg = await conn.fetchval(
-            """
-            INSET INTO trained_models ()
-            """
-        )
-        return {"status": "ok"}
+def register_dataset():
+    return {"status": "ok"}
