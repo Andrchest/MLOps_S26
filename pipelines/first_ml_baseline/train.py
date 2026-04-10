@@ -1,7 +1,7 @@
 """Simple baseline training script for tabular binary classification.
- and
+
 Usage:
-    python ml/train.py --data data/breast_cancer.csv
+    python pipelines/first_ml_baseline/train.py --data pipelines/first_ml_baseline/data/breast_cancer.csv
 """
 
 import argparse
@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 
 import joblib
+import mlflow
+import mlflow.sklearn
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -21,6 +23,7 @@ from sklearn.preprocessing import StandardScaler
 RANDOM_STATE = 42
 DEFAULT_TARGET_COLUMN = "target"
 DEFAULT_ARTIFACTS_DIR = Path("artifacts")
+DEFAULT_MLFLOW_EXPERIMENT = "first_ml_baseline"
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +39,11 @@ def parse_args() -> argparse.Namespace:
         "--target",
         default=DEFAULT_TARGET_COLUMN,
         help=f"Target column name. Default: {DEFAULT_TARGET_COLUMN}",
+    )
+    parser.add_argument(
+        "--mlflow-experiment",
+        default=DEFAULT_MLFLOW_EXPERIMENT,
+        help=f"MLflow experiment name. Default: {DEFAULT_MLFLOW_EXPERIMENT}",
     )
     return parser.parse_args()
 
@@ -124,6 +132,33 @@ def save_artifacts(
     return model_path, metrics_path
 
 
+def log_to_mlflow(
+    model: Pipeline,
+    metrics: dict[str, float],
+    data_path: str,
+    target_column: str,
+    experiment_name: str,
+) -> str:
+    mlflow.set_experiment(experiment_name)
+
+    classifier = model.named_steps["classifier"]
+    classifier_params = classifier.get_params()
+
+    with mlflow.start_run() as run:
+        mlflow.log_param("model_type", type(classifier).__name__)
+        mlflow.log_param("target_column", target_column)
+        mlflow.log_param("data_path", data_path)
+        mlflow.log_param("random_state", RANDOM_STATE)
+
+        for param_name, param_value in classifier_params.items():
+            mlflow.log_param(f"model__{param_name}", param_value)
+
+        mlflow.log_metrics(metrics)
+        mlflow.sklearn.log_model(model, artifact_path="model")
+
+        return run.info.run_id
+
+
 def main() -> None:
     args = parse_args()
     df = load_csv(args.data)
@@ -145,10 +180,18 @@ def main() -> None:
         metrics=metrics,
         artifacts_dir=DEFAULT_ARTIFACTS_DIR,
     )
+    run_id = log_to_mlflow(
+        model=model,
+        metrics=metrics,
+        data_path=args.data,
+        target_column=args.target,
+        experiment_name=args.mlflow_experiment,
+    )
 
     print("Training completed successfully.")
     print(f"Model saved to: {model_path}")
     print(f"Metrics saved to: {metrics_path}")
+    print(f"MLflow run logged successfully: {run_id}")
     print("Metrics:")
     for metric_name, metric_value in metrics.items():
         print(f"  {metric_name}: {metric_value:.4f}")
