@@ -3,7 +3,7 @@ import os
 
 # Connection to MinIO
 minio_client = Minio(
-    "localhost:9000", access_key="minio", secret_key="minio123", secure=False
+    "minio:9000", access_key="minio", secret_key="minio123", secure=False
 )
 
 
