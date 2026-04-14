@@ -28,9 +28,9 @@ async def lifespan(app: FastAPI):
     global model_executor, db_pool
 
     db_pool = await asyncpg.create_pool(
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        database=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER", "mlops"),
+        password=os.getenv("POSTGRES_PASSWORD", "mlops"),
+        database=os.getenv("POSTGRES_DB", "mlops"),
         host=os.getenv("POSTGRES_HOST", "postgres"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
     )
