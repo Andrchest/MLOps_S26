@@ -105,6 +105,6 @@ async def process_job(job):
         await update_status(job_id, "succeeded")
 
     except Exception as e:
-        print(e)
+        print(f"Error processing job {job_id}: {e}")
         await update_status(job_id, "failed")
-        raise
+        # DO NOT re-raise the exception. Let the worker continue to the next job.
