@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
         database=os.getenv("POSTGRES_DB"),
-        host="localhost",
-        port=5432,
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
     )
 
     # Initialize Process Pool for CPU-bound scikit-learn work
@@ -104,7 +104,7 @@ async def save_log(response: PredictResponse):
 
 
 @app.post("/predict", response_model=PredictResponse)
-async def predict(input_data: InputData, model_name, model_version):
+async def predict(input_data: InputData, model_name: str, model_version: str):
     start_time = datetime.now()
 
     try:
