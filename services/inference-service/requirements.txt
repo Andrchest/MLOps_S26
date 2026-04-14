@@ -11,3 +11,5 @@ joblib
 uvicorn
 minio
 asyncpg
+cachetools
+scikit-learn

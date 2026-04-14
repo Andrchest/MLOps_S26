@@ -3,12 +3,12 @@ import subprocess
 import mlflow
 import os
 from mlflow.tracking import MlflowClient
-from services.training_worker.db import (
+from db import (
     get_job,
     update_status,
     save_trained_model,
 )
-from services.training_worker.minio_client import (
+from minio_client import (
     download_dataset,
     save_model_to_minio,
 )
