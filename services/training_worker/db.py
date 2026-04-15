@@ -1,4 +1,5 @@
 db_pool = None
+import json
 
 
 async def get_job():
@@ -41,6 +42,6 @@ async def save_trained_model(
             model_name,
             model_version,
             model_path,
-            metrics,
-            parameters,
+            json.dumps(metrics),
+            json.dumps(parameters),
         )

@@ -48,14 +48,36 @@ def download_dataset(dataset_name: str, file_path: str, bucket=None):
 
 
 def save_model_to_minio(local_model_path, model_name, model_version):
+    import logging
+    import os
+
     object_path = f"{model_name}/{model_version}.joblib"
 
-    file_path = os.path.join(local_model_path, "model.pkl")
+    # Try different possible file names
+    possible_files = ["model.pkl", "model.joblib", "model"]
+    file_path = None
+    for fname in possible_files:
+        test_path = os.path.join(local_model_path, fname)
+        if os.path.exists(test_path):
+            file_path = test_path
+            break
 
-    minio_client.fput_object(
-        bucket_name=MODELS_BUCKET,
-        object_name=object_path,
-        file_path=file_path,
-    )
+    if not file_path:
+        # List what's in the directory
+        if os.path.exists(local_model_path):
+            logging.info(f"Files in {local_model_path}: {os.listdir(local_model_path)}")
+        raise FileNotFoundError(f"Model file not found in {local_model_path}")
+
+    logging.info(f"Saving model to MinIO: {object_path} from {file_path}")
+    try:
+        minio_client.fput_object(
+            bucket_name=MODELS_BUCKET,
+            object_name=object_path,
+            file_path=file_path,
+        )
+        logging.info(f"Model saved: {object_path}")
+    except Exception as e:
+        logging.error(f"Failed to save model: {e}")
+        raise
 
     return object_path
