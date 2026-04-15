@@ -1,9 +1,15 @@
 # Problems Found in MLOps Codebase
 
-## Critical Issues (Causes Hangs/Failures)
+## FIXED Issues
 
-### 1. No error handling in `save_model_to_minio()`
-**File:** `services/training_worker/minio_client.py:50`
+### 1. save_model_to_minio() - FIXED ✓
+- Now has try/except + logging + file name detection
+
+### 2. JSON metrics/parameters - FIXED ✓  
+- Now uses json.dumps()
+
+
+## Remaining Issues
 ```python
 def save_model_to_minio(local_model_path, model_name, model_version):
     object_path = f"{model_name}/{model_version}.joblib"
