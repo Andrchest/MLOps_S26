@@ -5,11 +5,11 @@ async def get_job():
     async with db_pool.acquire() as conn:
         return await conn.fetchrow("""
             UPDATE jobs
-            SET status = 'Running'
+            SET status = 'running'
             WHERE job_id = (
                 SELECT job_id
                 FROM jobs
-                WHERE status = 'Pending'
+                WHERE status = 'pending'
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )

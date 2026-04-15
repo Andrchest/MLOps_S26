@@ -3,7 +3,7 @@ import os
 
 minio_user = os.getenv("MINIO_ROOT_USER", "minio")
 minio_password = os.getenv("MINIO_ROOT_PASSWORD", "minio123")
-minio_endpoint = "minio:9000"
+minio_endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
 
 # Initialize Minio Client
 minio_client = Minio(

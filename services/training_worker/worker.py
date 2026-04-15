@@ -17,38 +17,60 @@ POLL_INTERVAL = 5
 
 
 async def worker_loop():
-    while True:
-        job = await get_job()
+    import logging
+    import sys
 
-        if job:
-            await process_job(job)
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+    logging.info("WORKER LOOP STARTED")
+    while True:
+        try:
+            job = await get_job()
+            logging.info(f"Polled, got job: {job}")
+
+            if job:
+                await process_job(job)
+        except Exception as e:
+            logging.error(f"Worker loop error: {e}")
 
         await asyncio.sleep(POLL_INTERVAL)
 
 
 async def process_job(job):
+    import logging
+
     job_id = job["job_id"]
     dataset_name = job["dataset_name"]
     dataset_id = job["dataset_id"]
+    import logging as log
+    import shutil
 
     try:
+        log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
         data_path = f"/tmp/{dataset_name}"
         os.makedirs("/tmp", exist_ok=True)
+        log.info(f"Downloading to {data_path}")
         download_dataset(dataset_name, data_path)
-
-        # Starting of the pipeline
+        log.info(f"Dataset downloaded to {data_path}")
+        csv_path = f"{data_path}.csv"
+        shutil.move(data_path, csv_path)
+        log.info(f"Moved to {csv_path}")
         result = subprocess.run(
             [
                 "python",
                 "pipelines/first_ml_baseline/train.py",
                 "--data",
-                data_path,
+                csv_path,
                 "--job_id",
                 str(job_id),
             ],
             capture_output=True,
             text=True,
         )
+        log.info(
+            f"Pipeline stdout: {result.stdout[:500] if result.stdout else 'empty'}"
+        )
+        if result.stderr:
+            log.warning(f"Pipeline stderr: {result.stderr[:500]}")
 
         if result.returncode != 0:
             raise Exception(f"Pipeline failed: {result.stderr}")
@@ -83,9 +105,12 @@ async def process_job(job):
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"
+        log.info(f"Model version: {model_version}")
 
         # Update status to mark the code part of saving model artifacts
+        log.info("Updating status to persisting")
         await update_status(job_id, "persisting")
+        log.info("Downloading artifacts from MLflow")
 
         model_path = save_model_to_minio(
             local_model_path=local_model_path,
@@ -105,6 +130,11 @@ async def process_job(job):
         await update_status(job_id, "succeeded")
 
     except Exception as e:
-        print(f"Error processing job {job_id}: {e}")
-        await update_status(job_id, "failed")
+        import logging
+
+        logging.error(f"Error processing job {job_id}: {e}", exc_info=True)
+        try:
+            await update_status(job_id, "failed")
+        except Exception as update_err:
+            logging.error(f"Failed to update status: {update_err}")
         # DO NOT re-raise the exception. Let the worker continue to the next job.
