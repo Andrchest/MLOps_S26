@@ -254,21 +254,49 @@ docker exec mlops_s26-minio-1 mc mb minio/models
 
 ---
 
-## Fix 10: Upload Test Dataset
+## Fix 11: JSON Dumps for Metrics/Parameters
 
-```bash
-# Create some test data
-echo "feature1,feature2,target" > /tmp/test.csv
-echo "1.0,2.0,0" >> /tmp/test.csv
-echo "2.0,3.0,0" >> /tmp/test.csv
-echo "3.0,4.0,1" >> /tmp/test.csv
-echo "4.0,5.0,1" >> /tmp/test.csv
-echo "5.0,6.0,0" >> /tmp/test.csv
-echo "6.0,7.0,1" >> /tmp/test.csv
+**Problem:** asyncpg throws error when inserting dict into JSONB column
 
-# Upload to MinIO
-docker cp /tmp/test.csv mlops_s26-minio-1:/tmp/test.csv
-docker exec mlops_s26-minio-1 mc cp /tmp/test.csv local/datasets/test_data
+**File:** `services/training_worker/db.py`
+
+**Fix:**
+```python
+import json
+# Use json.dumps() for metrics and parameters
+metrics=json.dumps(metrics),
+parameters=json.dumps(parameters),
+```
+
+---
+
+## Fix 12: Logging + Error Handling in save_model_to_minio
+
+**Problem:** Worker hangs at save_model_to_minio() with no error visibility
+
+**File:** `services/training_worker/minio_client.py`
+
+**Fix:** Added try/except + logging + file name detection
+```python
+def save_model_to_minio(local_model_path, model_name, model_version):
+    import logging
+    import os
+    
+    # Try different possible file names
+    possible_files = ["model.pkl", "model.joblib", "model"]
+    for fname in possible_files:
+        test_path = os.path.join(local_model_path, fname)
+        if os.path.exists(test_path):
+            file_path = test_path
+            break
+    
+    logging.info(f"Saving model to MinIO: {object_path}")
+    try:
+        minio_client.fput_object(...)
+        logging.info(f"Model saved: {object_path}")
+    except Exception as e:
+        logging.error(f"Failed to save model: {e}")
+        raise
 ```
 
 ---
