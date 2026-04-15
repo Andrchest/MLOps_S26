@@ -273,31 +273,19 @@ docker exec mlops_s26-minio-1 mc cp /tmp/test.csv local/datasets/test_data
 
 ---
 
-## Summary of Commands to Repeat the Process
+## Summary - How to Run on Your Machine
 
-### 1. Clone repo and create integration branch:
-```bash
-git checkout -b integration/week-2-backbone main
-git merge feature/training-worker feature/inference-service feature/inference-service-db
-```
-
-### 2. Apply all code fixes above to the files
-
-### 3. Start containers:
+### 1. Start containers:
 ```bash
 cd MLOps_S26
-
-# Kill any processes on ports
-lsof -ti:8000,8001,8002 | xargs -r kill -9
-
-# Start services
 docker compose up -d
 ```
 
-### 4. Initialize database:
+### 2. Initialize database (ONE TIME only):
 ```bash
 docker exec -i mlops_s26-postgres-1 psql -U mlops -d mlops < migrations/tables_for_worker.sql
 ```
+**Note:** Database name is `mlops`, not `ml`!
 
 ### 5. Create MinIO buckets:
 ```bash
