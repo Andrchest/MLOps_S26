@@ -10,7 +10,6 @@ from datetime import datetime
 from predictor import Predictor
 import os
 from load_model import fetch_model_bytes, _MODEL_BYTES_CACHE
-import logging
 
 reload_lock = asyncio.Lock()
 
@@ -99,14 +98,9 @@ async def save_log(response: PredictResponse):
                 response.latency_ms,
                 response.status,
             )
-        logging.info(f"Saved prediction log: request_id={response.request_id}")
-    except Exception:
-        logging.exception(
-            f"Failed to save prediction log "
-            f"(request_id={getattr(response, 'request_id', None)}, "
-            f"model={getattr(response, 'model_name', None)})"
-        )
-        raise
+        print("SAVED: ", response.request_id)
+    except Exception as e:
+        print("FAILED: ", e)
 
 
 @app.post("/predict", response_model=PredictResponse)

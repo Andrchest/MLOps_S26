@@ -1,17 +1,18 @@
 import joblib
 import pandas as pd
-from pathlib import Path
+import io
+from functools import lru_cache
 
 
-class ChurnPredictor:
-    def __init__(self, model_path: str):
-        self.model_path = Path(model_path)
-        self.model = self._load_model()
+# This cache lives inside each worker process
+@lru_cache(maxsize=10)
+def get_cached_model(model_bytes: bytes):
+    return joblib.load(io.BytesIO(model_bytes))
 
-    def _load_model(self):
-        if not self.model_path.exists():
-            raise FileNotFoundError(f"Model not found at {self.model_path}")
-        return joblib.load(self.model_path)
+
+class Predictor:
+    def __init__(self, model_bytes: bytes):
+        self.model = get_cached_model(model_bytes)
 
     def predict(self, input_data: dict):
         X = pd.DataFrame([input_data])

@@ -9,3 +9,4 @@ pandas
 scikit-learn
 numpy
 requests
+asyncpg

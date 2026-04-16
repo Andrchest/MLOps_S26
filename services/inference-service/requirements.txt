@@ -3,12 +3,13 @@ uvicorn
 pydantic
 sqlalchemy
 psycopg2-binary
-mlflow
-boto3
 pandas
-scikit-learn
 numpy
 requests
 pandas
 joblib
 uvicorn
+minio
+asyncpg
+cachetools
+scikit-learn
