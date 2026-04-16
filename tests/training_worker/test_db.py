@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from contextlib import asynccontextmanager
 

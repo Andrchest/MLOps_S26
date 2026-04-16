@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 import importlib.util
 import sys
@@ -25,10 +25,6 @@ class TestReload(unittest.TestCase):
     def setUp(self):
         self.mock_pool = AsyncMock()
 
-        self.patcher = patch("asyncpg.create_pool", new_callable=AsyncMock)
-        self.mock_create_pool = self.patcher.start()
-        self.mock_create_pool.return_value = self.mock_pool
-
         self.test_ctx = TestClient(application)
         self.client = self.test_ctx.__enter__()
 
@@ -46,7 +42,7 @@ class TestReload(unittest.TestCase):
         )
 
         # Trigger reload
-        response = self.client.get("/reload")
+        response = self.client.post("/reload")
 
         self.assertEqual(response.status_code, 200)
 
