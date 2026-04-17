@@ -1,4 +1,7 @@
 ## Description
+
+## Week 1
+
 This PR introduces a fully functional Training Worker service responsible for executing asynchronous ML training jobs as part of the distributed MLOps platform.
 
 The worker integrates with:
@@ -75,3 +78,15 @@ Stored in table trained_models:
 2. #### db.py
 - In the get_job function, there is a line FOR UPDATE SKIP LOCKED in the request. This is done to avoid a race condition where two workers can take the same job.
 - Combining UPDATE and SELECT allows this query to be atomic. 
+
+
+## Week 2
+
+- Added logging of the full work cycle of files (successes and errors)
+- Added try/except in risky part of the worker_loop
+- Added recovery after failures and retry-mechanisms for critical operations
+- Added in db.py function recover_stuck_jobs to update the status of jobs that have the running status at the time of the start of the worker_loop
+- Added in minio_client.py in function save_model_to_minio timeout and try/except for fput_object (it puts the model to minio)
+- Added file retry.py where retry-mechanisms is implemented through the async_retry and sync_retry functions; This is necessary to highlight this mechanism and centralize it throughout the work cycle, as it is used for various functions
+- In worker.py all the additions described above are reflected
+- Added new unit test (concurrency, retry, timeouts, and worker crash)
