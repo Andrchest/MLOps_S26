@@ -46,13 +46,16 @@ async def process_job(job):
 
     try:
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
-        data_path = f"/tmp/{dataset_name}"
-        os.makedirs("/tmp", exist_ok=True)
+        dataset_object_name = job.get("dataset_path") or dataset_name
+        local_file_name = os.path.basename(dataset_object_name)
+        data_path = os.path.join("/tmp", local_file_name)
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
         log.info(f"Downloading to {data_path}")
-        download_dataset(dataset_name, data_path)
+        download_dataset(dataset_object_name, data_path)
         log.info(f"Dataset downloaded to {data_path}")
-        csv_path = f"{data_path}.csv"
-        shutil.move(data_path, csv_path)
+        csv_path = data_path if data_path.endswith(".csv") else f"{data_path}.csv"
+        if csv_path != data_path:
+            shutil.move(data_path, csv_path)
         log.info(f"Moved to {csv_path}")
         result = subprocess.run(
             [

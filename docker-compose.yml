@@ -39,6 +39,7 @@ services:
     depends_on:
       - postgres
       - mlflow
+      - minio
 
   training-worker:
     build:
