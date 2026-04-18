@@ -33,20 +33,19 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/train")
-async def train(dataset_name: str, dataset_id: int):
+@app.post("/train/create")
+async def train(dataset_id: int):
     async with db_pool.acquire() as conn:
         job_id = await conn.fetchval(
             """
-            INSERT INTO jobs (dataset_name, dataset_id, status)
-            VALUES ($1, $2, 'pending')
+            INSERT INTO jobs (dataset_id, status)
+            VALUES ($1, 'pending')
             RETURNING job_id
             """,
-            dataset_name,
             dataset_id,
         )
 
-        return {"job_id": job_id, "status": "pending"}
+        return f"job_id: {job_id}"
 
 
 @app.get("/jobs/{job_id}")
@@ -54,7 +53,9 @@ async def get_status(job_id: int):
     async with db_pool.acquire() as conn:
         status = await conn.fetchval(
             """
-            SELECT status FROM jobs WHERE job_id = $1
+            SELECT (status)
+            from jobs
+            WHERE job_id = $1
             """,
             job_id,
         )
@@ -63,5 +64,49 @@ async def get_status(job_id: int):
 
 
 @app.post("/datasets")
-def register_dataset():
-    return {"status": "ok"}
+async def register_dataset(dataset_id: int, dataset_name: str, dataset_version: str):
+    async with db_pool.acquire() as conn:
+        try:
+            dataset = await conn.execute(
+                """
+                INSERT INTO datasets (dataset_id, dataset_name, dataset_version)
+                VALUES ($1, $2, $3)
+                RETURNING dataset_id, dataset_name
+                """,
+                dataset_id,
+                dataset_name,
+                dataset_version,
+            )
+            return f"register dataset: {dataset} OK"
+        except BaseException as e:
+            return f"FATAL: {e}"
+
+
+@app.post("/models/promote")
+async def promote_model(model_name: str, model_version: str):
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT *
+            FROM trained_models
+            WHERE model_name=$1 AND model_version=$2
+            """,
+            model_name,
+            model_version,
+        )
+
+    if not row:
+        return {"error": "model not found"}
+
+    await conn.execute(
+        """
+        INSERT INTO prod_models (model_name, model_version)
+        VALUES ($1, $2)
+        ON CONFLICT (model_name)
+        DO UPDATE SET model_version = EXCLUDED.model_version
+        """,
+        row["model_name"],
+        row["model_version"],
+    )
+
+    return {"status": "model promoted"}

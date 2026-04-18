@@ -7,6 +7,8 @@ async def get_job():
         return await conn.fetchrow("""
             UPDATE jobs
             SET status = 'running'
+            FROM datasets
+
             WHERE job_id = (
                 SELECT job_id
                 FROM jobs
@@ -14,7 +16,8 @@ async def get_job():
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING job_id, dataset_name, dataset_id
+            AND datasets.dataset_id = jobs.dataset_id
+            RETURNING jobs.job_id, datasets.dataset_name, jobs.dataset_id
             """)
 
 
