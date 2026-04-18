@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+markers = [
+    "integration",
+    "unit"
+]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["services"]
