@@ -7,7 +7,9 @@
 
 ## Summary
 
-After merging 5 feature branches and fixing test infrastructure, **24 tests pass**, **9 tests fail**, **2 tests skipped**.
+After merging 5 feature branches and fixing test infrastructure, **40 tests pass**, **14 tests fail**, **6 tests skipped**.
+
+**Final run:** Apr 20, 2026 — `pytest tests/ --ignore=tests/integration/`
 
 ---
 
@@ -42,7 +44,7 @@ After merging 5 feature branches and fixing test infrastructure, **24 tests pass
 
 ---
 
-## Remaining Test Failures (9)
+## Remaining Test Failures (14)
 
 ### Category A: Inference Service API Tests (3 failures)
 **Files:** `tests/services/inference-service/test_api.py`
@@ -111,7 +113,7 @@ After merging 5 feature branches and fixing test infrastructure, **24 tests pass
 
 ---
 
-## Tests That Now Pass (24)
+## Tests That Now Pass (40)
 
 ### Unit Tests (8 passed)
 - `tests/unit/inference_service/test_predictor.py` — 2 tests
