@@ -111,6 +111,22 @@ These 5 bugs were discovered when running integration tests against the merged d
 
 **Why these weren't caught earlier:** Each service worked correctly on its own branch. The bugs only manifested when all services ran together in docker-compose, interacting via MinIO, PostgreSQL, and the orchestrator API. See `MERGE_LOG.md` for the full merge process that combined these branches.
 
+### 13. Service Files Added/Modified During Merge
+
+These are the service code files (not tests, not infra) that were changed during the merge process. This table tells reviewers exactly what service code differs from the original branches.
+
+| File | Source | What Changed |
+|------|--------|--------------|
+| `services/orchestrator/app.py` | Cherry-picked from `feature/dataset-upload-flow` (Daria) | Replaced v1 (67 lines) with v2 (120 lines). Added `POST /datasets`, `GET /datasets/{id}` endpoints. v1 and v2 were divergent, so cherry-pick was used instead of merge to avoid massive conflicts. |
+| `services/orchestrator/dataset_service.py` | Cherry-picked from `feature/dataset-upload-flow` (Daria) | New file (157 lines). In-memory `DatasetRegistry` + MinIO upload client for dataset management. |
+| `services/monitoring-dashboard/app.py` | From `origin/feat/monitoring-dashboard` (Ahmed) | New file (66 lines). Streamlit dashboard entry point. |
+| `services/monitoring-dashboard/db.py` | From `origin/feat/monitoring-dashboard` (Ahmed) | New file (43 lines). Direct PostgreSQL read access for dashboard queries. |
+| `services/monitoring-dashboard/repository.py` | From `origin/feat/monitoring-dashboard` (Ahmed) | New file (66 lines). DB query layer — maps dashboard UI requests to SQL queries. |
+| `services/monitoring-dashboard/ui.py` | From `origin/feat/monitoring-dashboard` (Ahmed) | New file (17 lines). Streamlit UI components. |
+| `migrations/pred_logs.sql` | From `feature/inference-service-db` (Liza) | New file (28 lines). Creates `prediction_logs` table (UUID-based, stores prediction requests with input data, predictions, latency, timestamps). Indexed on `request_id`, `model_version`, `created_at`. |
+
+**Why this matters for reviewers:** These 7 files represent all service code that exists on `feature/week2-integration` but did not exist (or was significantly different) in any single original branch. Everything else on this branch came directly from one of the 5 merged branches without modification.
+
 ---
 
 ## Current Test Results
