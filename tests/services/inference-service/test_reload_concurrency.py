@@ -25,6 +25,7 @@ application = app
 class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from services.inference_service import app as app_mod
+
         if not hasattr(app_mod, "model_executor"):
             app_mod.model_executor = MagicMock()
 
@@ -39,8 +40,12 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
 
         old_executor = app_mod.model_executor
 
-        with patch.object(load_model, "fetch_model_with_retry", return_value=b"fake_bytes"), \
-             patch("services.inference_service.app._run_prediction", side_effect=lambda *a, **k: (1, 0.99)):
+        with patch.object(
+            load_model, "fetch_model_with_retry", return_value=b"fake_bytes"
+        ), patch(
+            "services.inference_service.app._run_prediction",
+            side_effect=lambda *a, **k: (1, 0.99),
+        ):
 
             # Trigger reload with POST
             reload_response = self.client.post("/reload")

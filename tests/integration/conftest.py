@@ -25,13 +25,15 @@ def _service_available(host, port, timeout=2):
 def integration_env_check():
     """Skip all integration tests if required services are not available."""
     services = [
-        ("localhost", 5432),   # postgres
-        ("localhost", 8000),   # orchestrator
-        ("localhost", 8001),   # inference-service
+        ("localhost", 5432),  # postgres
+        ("localhost", 8000),  # orchestrator
+        ("localhost", 8001),  # inference-service
     ]
     all_up = all(_service_available(host, port) for host, port in services)
     if not all_up:
-        pytest.skip("Integration services not available (postgres, orchestrator, inference-service must be running)")
+        pytest.skip(
+            "Integration services not available (postgres, orchestrator, inference-service must be running)"
+        )
 
 
 @pytest.fixture(scope="session")

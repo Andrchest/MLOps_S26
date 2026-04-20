@@ -2,8 +2,11 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 # Mock external modules before importing worker
 import sys
+
 sys.modules["mlflow"] = MagicMock()
 sys.modules["mlflow.tracking"] = MagicMock()
+sys.modules["mlflow.tracking.request_header"] = MagicMock()
+sys.modules["mlflow.tracking.request_header.registry"] = MagicMock()
 sys.modules["mlflow.artifacts"] = MagicMock()
 sys.modules["mlflow.sklearn"] = MagicMock()
 sys.modules["minio"] = MagicMock()
@@ -61,18 +64,43 @@ async def test_process_job_success(mock_db, mock_minio_client):
     mock_client = MagicMock()
     mock_client.search_runs.return_value = [mock_run]
 
-    with patch("services.training_worker.worker.get_job", return_value=None), \
-         patch("services.training_worker.worker.update_status", mock_db.update_status), \
-         patch("services.training_worker.worker.save_trained_model", mock_db.save_trained_model), \
-         patch("services.training_worker.worker.download_dataset", mock_minio_client.download_dataset), \
-         patch("services.training_worker.worker.save_model_to_minio", mock_minio_client.save_model_to_minio), \
-         patch("subprocess.run", return_value=mock_result), \
-         patch("mlflow.MlflowClient", return_value=mock_client), \
-         patch("mlflow.get_experiment_by_name", return_value=mock_exp), \
-         patch("mlflow.artifacts.download_artifacts", return_value="/tmp/model_dir"), \
-         patch("asyncio.sleep", new_callable=AsyncMock), \
-         patch("os.path.exists", return_value=True), \
-         patch("shutil.move"):
+    async def async_retry_mock(func, *args, **kwargs):
+        return await func(*args, **kwargs)
+
+    def sync_retry_mock(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    with patch("services.training_worker.worker.get_job", return_value=None), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.save_trained_model", mock_db.save_trained_model
+    ), patch(
+        "services.training_worker.worker.download_dataset",
+        mock_minio_client.download_dataset,
+    ), patch(
+        "services.training_worker.worker.save_model_to_minio",
+        mock_minio_client.save_model_to_minio,
+    ), patch(
+        "services.training_worker.worker.async_retry", async_retry_mock
+    ), patch(
+        "services.training_worker.worker.sync_retry", sync_retry_mock
+    ), patch(
+        "subprocess.run", return_value=mock_result
+    ), patch(
+        "services.training_worker.worker.MlflowClient", return_value=mock_client
+    ), patch(
+        "services.training_worker.worker.mlflow.get_experiment_by_name",
+        return_value=mock_exp,
+    ), patch(
+        "services.training_worker.worker.mlflow.artifacts.download_artifacts",
+        return_value="/tmp/model_dir",
+    ), patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ), patch(
+        "shutil.move"
+    ):
 
         await process_job(job)
 
@@ -90,12 +118,18 @@ async def test_process_job_pipeline_failure(mock_db, mock_minio_client):
     mock_result.returncode = 1
     mock_result.stderr = "Pipeline error"
 
-    with patch("services.training_worker.worker.get_job", return_value=None), \
-         patch("services.training_worker.worker.update_status", mock_db.update_status), \
-         patch("services.training_worker.worker.download_dataset", mock_minio_client.download_dataset), \
-         patch("subprocess.run", return_value=mock_result), \
-         patch("asyncio.sleep", new_callable=AsyncMock), \
-         patch("os.path.exists", return_value=True):
+    with patch("services.training_worker.worker.get_job", return_value=None), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.download_dataset",
+        mock_minio_client.download_dataset,
+    ), patch(
+        "subprocess.run", return_value=mock_result
+    ), patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ):
 
         await process_job(job)
 
@@ -125,14 +159,22 @@ async def test_worker_loop_calls_process():
     mock_minio.download_dataset = MagicMock()
     mock_minio.save_model_to_minio = MagicMock(return_value="minio://model.joblib")
 
-    with patch("services.training_worker.worker.get_job", mock_db.get_job), \
-         patch("services.training_worker.worker.update_status", mock_db.update_status), \
-         patch("services.training_worker.worker.save_trained_model", mock_db.save_trained_model), \
-         patch("services.training_worker.worker.recover_stuck_jobs", mock_db.recover_stuck_jobs), \
-         patch("services.training_worker.worker.download_dataset", mock_minio.download_dataset), \
-         patch("services.training_worker.worker.save_model_to_minio", mock_minio.save_model_to_minio), \
-         patch("services.training_worker.worker.process_job", new_callable=AsyncMock) as mock_process, \
-         patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    with patch("services.training_worker.worker.get_job", mock_db.get_job), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.save_trained_model", mock_db.save_trained_model
+    ), patch(
+        "services.training_worker.worker.recover_stuck_jobs", mock_db.recover_stuck_jobs
+    ), patch(
+        "services.training_worker.worker.download_dataset", mock_minio.download_dataset
+    ), patch(
+        "services.training_worker.worker.save_model_to_minio",
+        mock_minio.save_model_to_minio,
+    ), patch(
+        "services.training_worker.worker.process_job", new_callable=AsyncMock
+    ) as mock_process, patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
 
         mock_sleep.side_effect = asyncio.CancelledError("Stop")
 

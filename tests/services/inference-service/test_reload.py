@@ -24,6 +24,7 @@ application = app
 class TestReload(unittest.TestCase):
     def setUp(self):
         from services.inference_service import app as app_mod
+
         if not hasattr(app_mod, "model_executor"):
             app_mod.model_executor = MagicMock()
 
@@ -40,9 +41,7 @@ class TestReload(unittest.TestCase):
         self.assertEqual(len(app_mod._MODEL_BYTES_CACHE), 1)
 
         old_executor = getattr(app_mod, "model_executor", None)
-        self.assertIsNotNone(
-            old_executor, "model_executor should be initialized"
-        )
+        self.assertIsNotNone(old_executor, "model_executor should be initialized")
 
         # Trigger reload with POST
         response = self.client.post("/reload")

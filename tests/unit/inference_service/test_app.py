@@ -22,7 +22,9 @@ def mock_model_executor():
     """Provide a mock model_executor for tests that need it."""
     from services.inference_service import app as app_mod
 
-    with patch.object(app_mod, "model_executor", new_callable=lambda: MagicMock()) as mock:
+    with patch.object(
+        app_mod, "model_executor", new_callable=lambda: MagicMock()
+    ) as mock:
         mock.run_in_executor = MagicMock(side_effect=lambda *a, **k: None)
         yield mock
 
@@ -45,8 +47,11 @@ async def test_reload_success():
     # Initialize model_executor so reload has something to replace
     app_mod.model_executor = MagicMock()
 
-    with patch.object(app_mod, "ProcessPoolExecutor", return_value=MagicMock()) as mock_executor_cls, \
-         patch.object(app_mod, "reload_lock", new_callable=lambda: asyncio.Lock()):
+    with patch.object(
+        app_mod, "ProcessPoolExecutor", return_value=MagicMock()
+    ) as mock_executor_cls, patch.object(
+        app_mod, "reload_lock", new_callable=lambda: asyncio.Lock()
+    ):
 
         # Clear the bytes cache in the main process
         app_mod._MODEL_BYTES_CACHE.clear()
@@ -70,15 +75,22 @@ async def test_predict_success():
     mock_model_bytes = b"dummy_model_bytes"
 
     # Patch where fetch_model_with_retry is USED (app module namespace)
-    with patch.object(app_mod, "fetch_model_with_retry", return_value=mock_model_bytes), \
-         patch.object(app_mod, "_run_prediction", return_value=(1, 0.95)):
+    with patch.object(
+        app_mod, "fetch_model_with_retry", return_value=mock_model_bytes
+    ), patch.object(app_mod, "_run_prediction", return_value=(1, 0.95)):
 
         app_mod.model_executor = _make_mock_executor((1, 0.95))
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
+            payload = {
+                "age": 30,
+                "monthly_spend": 100.0,
+                "tenure_months": 12,
+                "income": 50000,
+                "credit_score": 700,
+            }
             response = await ac.post(
                 "/predict?model_name=test_model&model_version=v1", json=payload
             )
@@ -96,11 +108,20 @@ async def test_predict_success():
 async def test_predict_model_not_found():
     """Test that missing model returns 404."""
     from services.inference_service import app as app_mod
-    with patch.object(app_mod, "fetch_model_with_retry", side_effect=ValueError("Model not found")):
+
+    with patch.object(
+        app_mod, "fetch_model_with_retry", side_effect=ValueError("Model not found")
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
+            payload = {
+                "age": 30,
+                "monthly_spend": 100.0,
+                "tenure_months": 12,
+                "income": 50000,
+                "credit_score": 700,
+            }
             response = await ac.post(
                 "/predict?model_name=missing&model_version=v1", json=payload
             )
@@ -112,11 +133,22 @@ async def test_predict_model_not_found():
 async def test_predict_minio_unavailable():
     """Test that MinIO unavailability returns 503."""
     from services.inference_service import app as app_mod
-    with patch.object(app_mod, "fetch_model_with_retry", side_effect=Exception("MinIO connection failed")):
+
+    with patch.object(
+        app_mod,
+        "fetch_model_with_retry",
+        side_effect=Exception("MinIO connection failed"),
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
+            payload = {
+                "age": 30,
+                "monthly_spend": 100.0,
+                "tenure_months": 12,
+                "income": 50000,
+                "credit_score": 700,
+            }
             response = await ac.post(
                 "/predict?model_name=test&model_version=v1", json=payload
             )
@@ -131,16 +163,27 @@ async def test_predict_prediction_crash():
 
     mock_model_bytes = b"dummy_model_bytes"
 
-    with patch.object(app_mod, "fetch_model_with_retry", return_value=mock_model_bytes), \
-         patch.object(app_mod, "_run_prediction", side_effect=Exception("Model prediction failed")):
+    with patch.object(
+        app_mod, "fetch_model_with_retry", return_value=mock_model_bytes
+    ), patch.object(
+        app_mod, "_run_prediction", side_effect=Exception("Model prediction failed")
+    ):
 
         app_mod.model_executor = MagicMock()
-        app_mod.model_executor.run_in_executor = MagicMock(side_effect=lambda exec, func, *args: func(*args))
+        app_mod.model_executor.run_in_executor = MagicMock(
+            side_effect=lambda exec, func, *args: func(*args)
+        )
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
+            payload = {
+                "age": 30,
+                "monthly_spend": 100.0,
+                "tenure_months": 12,
+                "income": 50000,
+                "credit_score": 700,
+            }
             response = await ac.post(
                 "/predict?model_name=test_model&model_version=v1", json=payload
             )

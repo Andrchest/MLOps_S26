@@ -54,13 +54,13 @@ async def test_fetch_model_bytes_not_found_raises_value_error():
     # Create a mock HTTPResponse for S3Error
     from http.client import HTTPResponse
     from io import BytesIO
-    
+
     mock_response = MagicMock()
     mock_response.status = 404
     mock_response.reason = "Not Found"
     mock_response.getheaders = MagicMock(return_value=[("x-amz-request-id", "test-id")])
     mock_response.read = MagicMock(return_value=b'{"code":"NoSuchKey"}')
-    
+
     mock_s3_error = S3Error(
         response=mock_response,
         code="NoSuchKey",
@@ -69,7 +69,7 @@ async def test_fetch_model_bytes_not_found_raises_value_error():
         request_id="test",
         host_id="test-host",
         bucket_name="models",
-        object_name="test.joblib"
+        object_name="test.joblib",
     )
 
     with patch("load_model.get_model_from_minio", side_effect=mock_s3_error):
@@ -85,7 +85,9 @@ async def test_fetch_model_bytes_other_error_propagates():
     model_name = "test_model"
     model_version = "v1"
 
-    with patch("load_model.get_model_from_minio", side_effect=Exception("Network error")):
+    with patch(
+        "load_model.get_model_from_minio", side_effect=Exception("Network error")
+    ):
         with pytest.raises(Exception, match="Network error"):
             await fetch_model_bytes(model_name, model_version)
 
