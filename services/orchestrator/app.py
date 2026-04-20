@@ -47,12 +47,25 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/train")
+@app.post("/train", status_code=201)
 async def train(dataset_name: str, dataset_id: int):
     if db_pool is None:
         raise HTTPException(status_code=503, detail="Database is not available.")
 
     async with db_pool.acquire() as conn:
+        # Idempotency: check if exact same request was already processed
+        existing = await conn.fetchval(
+            """
+            SELECT job_id FROM jobs
+            WHERE dataset_name = $1 AND dataset_id = $2 AND status = 'pending'
+            LIMIT 1
+            """,
+            dataset_name,
+            dataset_id,
+        )
+        if existing:
+            return {"job_id": existing, "status": "pending"}
+
         job_id = await conn.fetchval(
             """
             INSERT INTO jobs (dataset_name, dataset_id, status)

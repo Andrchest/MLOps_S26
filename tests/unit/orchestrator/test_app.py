@@ -38,9 +38,22 @@ async def test_train_success(client, mock_db_pool):
 
     response = await client.post("/train?dataset_name=test_dataset&dataset_id=1")
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json() == {"job_id": 123, "status": "pending"}
     mock_conn.fetchval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_train_idempotency(client, mock_db_pool):
+    # When a pending job with same params exists, return existing job_id
+    mock_conn = AsyncMock()
+    mock_conn.fetchval.side_effect = [100, 100]  # idempotency check returns existing, then INSERT returns same
+    mock_db_pool.acquire.return_value.__aenter__.return_value = mock_conn
+
+    response = await client.post("/train?dataset_name=test_dataset&dataset_id=1")
+
+    assert response.status_code == 201
+    assert response.json() == {"job_id": 100, "status": "pending"}
 
 
 @pytest.mark.asyncio

@@ -198,7 +198,7 @@ class TestLifecycleValidation:
         response = await http_client.post(
             f"{INFERENCE_URL}/predict",
             params={"model_name": "LogisticRegression", "model_version": model_version},
-            json={"feature1": 1.0, "feature2": 2.0},
+            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12},
         )
 
         # Should return prediction
@@ -219,7 +219,7 @@ class TestLifecycleValidation:
         await http_client.post(
             f"{INFERENCE_URL}/predict",
             params={"model_name": "LogisticRegression", "model_version": "1_1_test"},
-            json={"feature1": 1.0, "feature2": 2.0},
+            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12},
         )
 
         # Verify log was created
