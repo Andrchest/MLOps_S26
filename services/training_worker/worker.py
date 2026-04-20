@@ -8,6 +8,7 @@ from services.training_worker.db import (
     recover_stuck_jobs,
     update_status,
     save_trained_model,
+    JobStatus,
 )
 from services.training_worker.minio_client import (
     download_dataset,
@@ -18,7 +19,10 @@ from services.training_worker.retry import (
     async_retry,
 )
 
-POLL_INTERVAL = 5
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 5))
+TMP_DIR = os.getenv("TMP_DIR", "/tmp")
+TRAINING_SCRIPT = os.getenv("TRAINING_SCRIPT", "pipelines/first_ml_baseline/train.py")
+TIMEOUT = int(os.getenv("TRAINING_TIMEOUT", 300))
 
 
 async def worker_loop():
@@ -53,7 +57,7 @@ async def process_job(job):
 
     try:
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
-        data_path = f"/tmp/{dataset_name}"
+        data_path = os.path.join(TMP_DIR, dataset_name)
         os.makedirs("/tmp", exist_ok=True)
 
         log.info(f"Downloading to {data_path}")
@@ -69,7 +73,7 @@ async def process_job(job):
             result = subprocess.run(
                 [
                     "python",
-                    "pipelines/first_ml_baseline/train.py",
+                    TRAINING_SCRIPT,
                     "--data",
                     csv_path,
                     "--job_id",
@@ -77,7 +81,7 @@ async def process_job(job):
                 ],
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=TIMEOUT,
             )
         except subprocess.TimeoutExpired:
             raise Exception("Training timeout")
@@ -94,7 +98,7 @@ async def process_job(job):
         client = MlflowClient()
 
         # Here we find the experiment by job_id and the latest job
-        experiment_name = "first_ml_baseline"
+        experiment_name = os.getenv("MLFLOW_EXPERIMENT", "first_ml_baseline")
         exp = mlflow.get_experiment_by_name(experiment_name)
 
         runs = client.search_runs(
@@ -124,7 +128,7 @@ async def process_job(job):
 
         # Update status to mark the code part of saving model artifacts
         log.info("Updating status to persisting")
-        await async_retry(update_status, job_id, "persisting")
+        await async_retry(update_status, job_id, JobStatus.PERSISTING)
         log.info("Downloading artifacts from MLflow")
 
         model_path = sync_retry(
@@ -144,14 +148,14 @@ async def process_job(job):
             parameters=params,
         )
 
-        await async_retry(update_status, job_id, "succeeded")
+        await async_retry(update_status, job_id, JobStatus.SUCCEEDED)
 
     except Exception as e:
         import logging
 
         logging.error(f"Error processing job {job_id}: {e}", exc_info=True)
         try:
-            await async_retry(update_status, job_id, "failed")
+            await async_retry(update_status, job_id, JobStatus.FAILED)
         except Exception as update_err:
             logging.error(f"Failed to update status: {update_err}")
         # DO NOT re-raise the exception. Let the worker continue to the next job.

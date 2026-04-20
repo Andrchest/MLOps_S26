@@ -3,6 +3,14 @@ import json
 db_pool = None
 
 
+class JobStatus:
+    PENDING = "pending"
+    RUNNING = "running"
+    FAILED = "failed"
+    SUCCEEDED = "succeeded"
+    PERSISTING = "persisting"
+
+
 async def recover_stuck_jobs():
     import logging
 

@@ -70,7 +70,12 @@ def get_correlation_id() -> str:
 
 
 class CorrelationLogger(StructuredLogger):
-    def __init__(self, name: str, service_name: Optional[str] = None, correlation_id: Optional[str] = None):
+    def __init__(
+        self,
+        name: str,
+        service_name: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+    ):
         super().__init__(name, service_name)
         self.correlation_id = correlation_id or get_correlation_id()
 
