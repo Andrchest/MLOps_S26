@@ -35,14 +35,13 @@ sys.path.insert(0, "/home/andreipc/MLOps/MLOps_S26")
 
 # Now reload minio_client to get the real training_worker version (with minio mocked)
 del sys.modules["minio_client"]
-import minio_client
-from minio_client import download_dataset, save_model_to_minio
+import services.training_worker.minio_client as minio_client
 
 
 @patch.object(minio_client.minio_client, "fget_object")
 def test_download_dataset(mock_fget):
     """Test that download_dataset calls fget_object with correct arguments."""
-    download_dataset("test_dataset", "/tmp/test_data")
+    minio_client.download_dataset("test_dataset", "/tmp/test_data")
     mock_fget.assert_called_once_with(
         bucket_name=minio_client.DATASETS_BUCKET,
         object_name="test_dataset",
@@ -56,7 +55,7 @@ def test_save_model_to_minio_success(mock_exists, mock_fput):
     """Test that save_model_to_minio uploads the model file to MinIO."""
     mock_exists.side_effect = lambda p: p == "/tmp/model/model.pkl"
 
-    result = save_model_to_minio("/tmp/model", "my_model", "v1")
+    result = minio_client.save_model_to_minio("/tmp/model", "my_model", "v1")
 
     expected_object_path = "my_model/v1.joblib"
     assert result == expected_object_path
@@ -73,4 +72,4 @@ def test_save_model_to_minio_not_found(mock_exists):
     mock_exists.return_value = False
 
     with pytest.raises(FileNotFoundError):
-        save_model_to_minio("/tmp/model", "my_model", "v1")
+        minio_client.save_model_to_minio("/tmp/model", "my_model", "v1")
