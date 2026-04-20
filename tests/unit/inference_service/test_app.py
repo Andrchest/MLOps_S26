@@ -1,22 +1,20 @@
-import sys
-from pathlib import Path
 import pytest
 import asyncio
+from concurrent.futures import Future
 from unittest.mock import MagicMock, patch, AsyncMock
+from httpx import AsyncClient, ASGITransport
 
-# Add the project root and the service directory to sys.path
-project_root = Path(__file__).parent.parent.parent
-service_dir = project_root / "services" / "inference_service"
-sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(service_dir))
+from services.inference_service.app import app
+from services.inference_service import load_model
 
-try:
-    from services.inference_service.app import app
-    from services.inference_service import load_model
-    from httpx import AsyncClient, ASGITransport
-except ImportError as e:
-    print(f"Import error: {e}")
-    raise
+
+def _make_mock_executor(run_result):
+    """Create a mock executor that returns run_result from submit()."""
+    fut = Future()
+    fut.set_result(run_result)
+    mock = MagicMock()
+    mock.submit = MagicMock(return_value=fut)
+    return mock
 
 
 @pytest.fixture
@@ -67,17 +65,15 @@ async def test_reload_success():
 @pytest.mark.asyncio
 async def test_predict_success():
     """Test successful prediction with mocked model loading and executor."""
+    from services.inference_service import app as app_mod
+
     mock_model_bytes = b"dummy_model_bytes"
 
-    async def mock_run(*args, **kwargs):
-        return (1, 0.95)
+    # Patch where fetch_model_with_retry is USED (app module namespace)
+    with patch.object(app_mod, "fetch_model_with_retry", return_value=mock_model_bytes), \
+         patch.object(app_mod, "_run_prediction", return_value=(1, 0.95)):
 
-    with patch.object(load_model, "fetch_model_with_retry", return_value=mock_model_bytes), \
-         patch.object(load_model, "run_in_executor", new_callable=lambda: mock_run):
-
-        from services.inference_service import app as app_mod
-        app_mod.model_executor = MagicMock()
-        app_mod.model_executor.run_in_executor = mock_run
+        app_mod.model_executor = _make_mock_executor((1, 0.95))
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -99,7 +95,8 @@ async def test_predict_success():
 @pytest.mark.asyncio
 async def test_predict_model_not_found():
     """Test that missing model returns 404."""
-    with patch.object(load_model, "fetch_model_with_retry", side_effect=ValueError("Model not found")):
+    from services.inference_service import app as app_mod
+    with patch.object(app_mod, "fetch_model_with_retry", side_effect=ValueError("Model not found")):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
@@ -114,7 +111,8 @@ async def test_predict_model_not_found():
 @pytest.mark.asyncio
 async def test_predict_minio_unavailable():
     """Test that MinIO unavailability returns 503."""
-    with patch.object(load_model, "fetch_model_with_retry", side_effect=Exception("MinIO connection failed")):
+    from services.inference_service import app as app_mod
+    with patch.object(app_mod, "fetch_model_with_retry", side_effect=Exception("MinIO connection failed")):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
@@ -129,14 +127,15 @@ async def test_predict_minio_unavailable():
 @pytest.mark.asyncio
 async def test_predict_prediction_crash():
     """Test that prediction logic crash returns 500."""
+    from services.inference_service import app as app_mod
+
     mock_model_bytes = b"dummy_model_bytes"
 
-    with patch.object(load_model, "fetch_model_with_retry", return_value=mock_model_bytes), \
-         patch("services.inference_service.app._run_prediction", side_effect=Exception("Model prediction failed")):
+    with patch.object(app_mod, "fetch_model_with_retry", return_value=mock_model_bytes), \
+         patch.object(app_mod, "_run_prediction", side_effect=Exception("Model prediction failed")):
 
-        from services.inference_service import app as app_mod
         app_mod.model_executor = MagicMock()
-        app_mod.model_executor.run_in_executor = MagicMock(side_effect=lambda *args: (1, 0.95))
+        app_mod.model_executor.run_in_executor = MagicMock(side_effect=lambda exec, func, *args: func(*args))
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

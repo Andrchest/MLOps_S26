@@ -8,6 +8,30 @@ import asyncpg
 from minio import Minio
 import mlflow
 from mlflow.tracking import MlflowClient
+import socket
+
+
+def _service_available(host, port, timeout=2):
+    """Check if a service is reachable on the given host:port."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            return s.connect_ex((host, port)) == 0
+    except OSError:
+        return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def integration_env_check():
+    """Skip all integration tests if required services are not available."""
+    services = [
+        ("localhost", 5432),   # postgres
+        ("localhost", 8000),   # orchestrator
+        ("localhost", 8001),   # inference-service
+    ]
+    all_up = all(_service_available(host, port) for host, port in services)
+    if not all_up:
+        pytest.skip("Integration services not available (postgres, orchestrator, inference-service must be running)")
 
 
 @pytest.fixture(scope="session")

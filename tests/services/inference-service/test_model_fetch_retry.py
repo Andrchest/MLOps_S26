@@ -16,21 +16,17 @@ if str(project_root) not in sys.path:
 
 
 class TestFetchRetry(unittest.IsolatedAsyncioTestCase):
-    @patch("minio_client.get_model_from_minio")
+    @patch("services.inference_service.load_model.get_model_from_minio")
     async def test_retry_model_fetch(self, mock_minio):
-        import load_model as load_model_module
+        from services.inference_service import load_model
 
-        # Disable retry wait for faster tests
-        from tenacity import retry
-
-        # Get the retry decorator's settings
         mock_minio.side_effect = [
             Exception("fail1"),
             Exception("fail2"),
             b"model_bytes",
         ]
 
-        result = await load_model_module.fetch_model_with_retry("m", "v1")
+        result = await load_model.fetch_model_with_retry("m", "v1")
 
         self.assertEqual(result, b"model_bytes")
         self.assertEqual(mock_minio.call_count, 3)
