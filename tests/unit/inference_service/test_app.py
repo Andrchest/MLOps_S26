@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 import pytest
 import asyncio
@@ -12,13 +11,9 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(service_dir))
 
 try:
-    import app
-    from schemas import InputData, Prediction, PredictResponse
+    from services.inference_service.app import app
+    from services.inference_service import load_model
     from httpx import AsyncClient, ASGITransport
-
-    APP_INSTANCE = app.app
-    APP_MODULE_NAME = "app"
-    SCHEMA_MODULE_NAME = "schemas"
 except ImportError as e:
     print(f"Import error: {e}")
     raise
@@ -27,7 +22,9 @@ except ImportError as e:
 @pytest.fixture
 def mock_model_executor():
     """Provide a mock model_executor for tests that need it."""
-    with patch(f"{APP_MODULE_NAME}.model_executor") as mock:
+    from services.inference_service import app as app_mod
+
+    with patch.object(app_mod, "model_executor", new_callable=lambda: MagicMock()) as mock:
         mock.run_in_executor = MagicMock(side_effect=lambda *a, **k: None)
         yield mock
 
@@ -35,7 +32,7 @@ def mock_model_executor():
 @pytest.mark.asyncio
 async def test_health_ok():
     async with AsyncClient(
-        transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         response = await ac.get("/health")
     assert response.status_code == 200
@@ -50,18 +47,15 @@ async def test_reload_success():
     # Initialize model_executor so reload has something to replace
     app_mod.model_executor = MagicMock()
 
-    with patch(f"{APP_MODULE_NAME}.ProcessPoolExecutor") as mock_executor_cls, patch(
-        f"{APP_MODULE_NAME}.reload_lock", asyncio.Lock()
-    ):
-
-        mock_executor_cls.return_value = MagicMock()
+    with patch.object(app_mod, "ProcessPoolExecutor", return_value=MagicMock()) as mock_executor_cls, \
+         patch.object(app_mod, "reload_lock", new_callable=lambda: asyncio.Lock()):
 
         # Clear the bytes cache in the main process
         app_mod._MODEL_BYTES_CACHE.clear()
         app_mod._MODEL_BYTES_CACHE["test_key"] = b"test_bytes"
 
         async with AsyncClient(
-            transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
             response = await ac.post("/reload")
 
@@ -75,23 +69,23 @@ async def test_predict_success():
     """Test successful prediction with mocked model loading and executor."""
     mock_model_bytes = b"dummy_model_bytes"
 
-    with patch(
-        "load_model.fetch_model_with_retry", return_value=mock_model_bytes
-    ), patch("app._run_prediction", return_value=(1, 0.95)), patch(
-        f"{APP_MODULE_NAME}.model_executor"
-    ) as mock_executor:
+    async def mock_run(*args, **kwargs):
+        return (1, 0.95)
 
-        mock_loop = MagicMock()
-        mock_executor.run_in_executor = MagicMock(side_effect=lambda *args: (1, 0.95))
+    with patch.object(load_model, "fetch_model_with_retry", return_value=mock_model_bytes), \
+         patch.object(load_model, "run_in_executor", new_callable=lambda: mock_run):
 
-        with patch("asyncio.get_running_loop", return_value=mock_loop):
-            async with AsyncClient(
-                transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
-            ) as ac:
-                payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
-                response = await ac.post(
-                    "/predict?model_name=test_model&model_version=v1", json=payload
-                )
+        from services.inference_service import app as app_mod
+        app_mod.model_executor = MagicMock()
+        app_mod.model_executor.run_in_executor = mock_run
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
+            response = await ac.post(
+                "/predict?model_name=test_model&model_version=v1", json=payload
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -105,11 +99,9 @@ async def test_predict_success():
 @pytest.mark.asyncio
 async def test_predict_model_not_found():
     """Test that missing model returns 404."""
-    with patch(
-        "load_model.fetch_model_with_retry", side_effect=ValueError("Model not found")
-    ):
+    with patch.object(load_model, "fetch_model_with_retry", side_effect=ValueError("Model not found")):
         async with AsyncClient(
-            transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
             payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
             response = await ac.post(
@@ -122,12 +114,9 @@ async def test_predict_model_not_found():
 @pytest.mark.asyncio
 async def test_predict_minio_unavailable():
     """Test that MinIO unavailability returns 503."""
-    with patch(
-        "load_model.fetch_model_with_retry",
-        side_effect=Exception("MinIO connection failed"),
-    ):
+    with patch.object(load_model, "fetch_model_with_retry", side_effect=Exception("MinIO connection failed")):
         async with AsyncClient(
-            transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
             payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
             response = await ac.post(
@@ -142,12 +131,15 @@ async def test_predict_prediction_crash():
     """Test that prediction logic crash returns 500."""
     mock_model_bytes = b"dummy_model_bytes"
 
-    with patch(
-        "load_model.fetch_model_with_retry", return_value=mock_model_bytes
-    ), patch("app._run_prediction", side_effect=Exception("Model prediction failed")):
+    with patch.object(load_model, "fetch_model_with_retry", return_value=mock_model_bytes), \
+         patch("services.inference_service.app._run_prediction", side_effect=Exception("Model prediction failed")):
+
+        from services.inference_service import app as app_mod
+        app_mod.model_executor = MagicMock()
+        app_mod.model_executor.run_in_executor = MagicMock(side_effect=lambda *args: (1, 0.95))
 
         async with AsyncClient(
-            transport=ASGITransport(app=APP_INSTANCE), base_url="http://test"
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
             payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
             response = await ac.post(

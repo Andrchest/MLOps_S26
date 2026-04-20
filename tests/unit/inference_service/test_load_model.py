@@ -1,10 +1,11 @@
 import sys
 import pytest
-import asyncio
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Ensure the service directory is in the path
-sys.path.append("/home/andreipc/MLOps/MLOps_S26/services/inference-service")
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root / "services" / "inference_service"))
 
 from load_model import fetch_model_bytes, _MODEL_BYTES_CACHE
 from minio.error import S3Error
@@ -50,8 +51,8 @@ async def test_fetch_model_bytes_not_found_raises_value_error():
     model_name = "test_model"
     model_version = "v1"
 
-    mock_s3_error = MagicMock(spec=S3Error)
-    mock_s3_error.code = "NoSuchKey"
+    # Create a proper S3Error subclass mock
+    mock_s3_error = S3Error("NoSuchKey", {"key": "value"}, request_id="test", bucket_name="models", object_name="test.joblib")
 
     with patch("load_model.get_model_from_minio", side_effect=mock_s3_error):
         with pytest.raises(ValueError, match="Model test_model/v1.joblib not found"):
@@ -66,9 +67,7 @@ async def test_fetch_model_bytes_other_error_propagates():
     model_name = "test_model"
     model_version = "v1"
 
-    with patch(
-        "load_model.get_model_from_minio", side_effect=Exception("Network error")
-    ):
+    with patch("load_model.get_model_from_minio", side_effect=Exception("Network error")):
         with pytest.raises(Exception, match="Network error"):
             await fetch_model_bytes(model_name, model_version)
 
