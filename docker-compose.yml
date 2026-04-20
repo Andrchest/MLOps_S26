@@ -39,6 +39,7 @@ services:
     depends_on:
       - postgres
       - mlflow
+      - minio
 
   training-worker:
     build:
@@ -69,6 +70,15 @@ services:
       - "8002:8002"
     depends_on:
       - postgres
+
+  monitoring-dashboard:
+    build: ./services/monitoring-dashboard
+    env_file: .env
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+      - orchestrator
 
 volumes:
   postgres_data:

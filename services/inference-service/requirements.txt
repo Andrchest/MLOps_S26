@@ -6,9 +6,7 @@ psycopg2-binary
 pandas
 numpy
 requests
-pandas
 joblib
-uvicorn
 minio
 cachetools
 scikit-learn
