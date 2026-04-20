@@ -78,7 +78,7 @@ async def test_predict_success():
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
+            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
             response = await ac.post(
                 "/predict?model_name=test_model&model_version=v1", json=payload
             )
@@ -100,7 +100,7 @@ async def test_predict_model_not_found():
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
+            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
             response = await ac.post(
                 "/predict?model_name=missing&model_version=v1", json=payload
             )
@@ -116,7 +116,7 @@ async def test_predict_minio_unavailable():
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
+            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
             response = await ac.post(
                 "/predict?model_name=test&model_version=v1", json=payload
             )
@@ -140,7 +140,7 @@ async def test_predict_prediction_crash():
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12}
+            payload = {"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700}
             response = await ac.post(
                 "/predict?model_name=test_model&model_version=v1", json=payload
             )

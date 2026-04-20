@@ -26,6 +26,25 @@ services:
     volumes:
       - minio_data:/data
 
+  minio-seed:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./seeds:/seeds
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing myminio/datasets;
+      mc mb --ignore-existing myminio/models;
+      mc cp /seeds/sample_dataset.csv myminio/datasets/test_data;
+      echo 'Seed complete.';
+      "
+
   mlflow:
     image: ghcr.io/mlflow/mlflow
     command: mlflow server --host 0.0.0.0 --port 5000 --disable-security-middleware
@@ -40,7 +59,7 @@ services:
     depends_on:
       - postgres
       - mlflow
-      - minio
+      - minio-seed
 
   training-worker:
     build:
@@ -49,10 +68,11 @@ services:
     env_file: .env
     environment:
       MLFLOW_TRACKING_URI: "http://mlflow:5000"
+      MINIO_ENDPOINT: "minio:9000"
     depends_on:
       - postgres
       - mlflow
-      - minio
+      - minio-seed
 
   inference_service:
     build: ./services/inference_service

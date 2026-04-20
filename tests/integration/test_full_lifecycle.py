@@ -179,26 +179,25 @@ class TestLifecycleValidation:
         pytest.skip("Deployment endpoint not implemented yet")
 
     @pytest.mark.asyncio
-    async def test_inference_serving(self, http_client):
+    async def test_inference_serving(self, http_client, db_pool):
         """
         Test: serve predictions
         Validates: §3.5 Inference Serving
 
         Expected: POST /predict returns prediction with request_id
         """
-        # First, get a trained model version
-        async with httpx.AsyncClient() as client:
-            # Get latest model
-            models_resp = await client.get(f"{INFERENCE_URL}/models")
-
-        # Get model version from response
-        # This is a placeholder - actual implementation depends on API design
-        model_version = "1_1_test"
+        # Get latest trained model from database
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT model_name, model_version FROM trained_models ORDER BY job_id DESC LIMIT 1"
+            )
+            model_name = row["model_name"]
+            model_version = row["model_version"]
 
         response = await http_client.post(
             f"{INFERENCE_URL}/predict",
-            params={"model_name": "LogisticRegression", "model_version": model_version},
-            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12},
+            params={"model_name": model_name, "model_version": model_version},
+            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700},
         )
 
         # Should return prediction
@@ -215,11 +214,19 @@ class TestLifecycleValidation:
 
         Expected: prediction_logs table records the request
         """
+        # Get latest trained model from database
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT model_name, model_version FROM trained_models ORDER BY job_id DESC LIMIT 1"
+            )
+            model_name = row["model_name"]
+            model_version = row["model_version"]
+
         # Make a prediction
         await http_client.post(
             f"{INFERENCE_URL}/predict",
-            params={"model_name": "LogisticRegression", "model_version": "1_1_test"},
-            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12},
+            params={"model_name": model_name, "model_version": model_version},
+            json={"age": 30, "monthly_spend": 100.0, "tenure_months": 12, "income": 50000, "credit_score": 700},
         )
 
         # Verify log was created

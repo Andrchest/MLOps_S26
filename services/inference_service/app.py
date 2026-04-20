@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 import uuid
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from concurrent.futures import ProcessPoolExecutor
 from schemas import InputData, Prediction, PredictResponse
@@ -8,8 +9,10 @@ from datetime import datetime
 from predictor import Predictor
 from load_model import fetch_model_with_retry, _MODEL_BYTES_CACHE
 import os
+import asyncpg
 
 reload_lock = asyncio.Lock()
+db_pool = None
 
 
 def _run_prediction(model_bytes: bytes, input_dict: dict):
@@ -23,14 +26,29 @@ def _run_prediction(model_bytes: bytes, input_dict: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model_executor
+    global model_executor, db_pool
 
     # Initialize Process Pool for CPU-bound scikit-learn work
     model_executor = ProcessPoolExecutor(max_workers=4)
 
+    # Initialize database pool for prediction logging (optional)
+    global db_pool
+    try:
+        db_pool = await asyncpg.create_pool(
+            user=os.getenv("POSTGRES_USER", "mlops"),
+            password=os.getenv("POSTGRES_PASSWORD", "mlops"),
+            database=os.getenv("POSTGRES_DB", "mlops"),
+            host=os.getenv("POSTGRES_HOST", "postgres"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+        )
+    except Exception:
+        db_pool = None  # Prediction logging disabled if DB unavailable
+
     yield
 
     model_executor.shutdown(wait=True)
+    if db_pool:
+        await db_pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -94,9 +112,12 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
     # latency
     latency = int((datetime.now() - start_time).total_seconds() * 1000)
 
+    request_id = str(uuid.uuid4())
+    timestamp = datetime.now()
+
     response = PredictResponse(
-        request_id=str(uuid.uuid4()),
-        timestamp=datetime.now(),
+        request_id=request_id,
+        timestamp=timestamp,
         model_version=model_version,
         model_name=model_name,
         input_data=input_data,
@@ -104,5 +125,27 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
         latency_ms=latency,
         status=status_msg,
     )
+
+    # Log prediction to database
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO prediction_logs
+                    (request_id, timestamp, model_name, model_version, input_data, prediction, latency_ms, status)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
+                    request_id,
+                    timestamp,
+                    model_name,
+                    model_version,
+                    json.dumps(input_data.model_dump()),
+                    json.dumps({"label": prediction.label, "score": prediction.score}),
+                    latency,
+                    status_msg,
+                )
+        except Exception:
+            pass  # Don't fail the request if logging fails
 
     return response

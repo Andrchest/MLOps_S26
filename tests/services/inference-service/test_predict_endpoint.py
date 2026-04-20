@@ -44,7 +44,7 @@ class TestPrediction(unittest.TestCase):
                 lambda: self.client.post(
                     "/predict",
                     params={"model_name": "m", "model_version": "v1"},
-                    json={"age": 30},
+                    json={"age": 30, "monthly_spend": 50.0, "tenure_months": 10, "income": 50000, "credit_score": 700},
                 ),
             )
             for _ in range(10)
@@ -65,7 +65,7 @@ class TestPrediction(unittest.TestCase):
         response = self.client.post(
             "/predict",
             params={"model_name": "m", "model_version": "v1"},
-            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 10},
+            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 10, "income": 50000, "credit_score": 700},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -81,7 +81,7 @@ class TestPrediction(unittest.TestCase):
         response = self.client.post(
             "/predict",
             params={"model_name": "m", "model_version": "v1"},
-            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 10},
+            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 10, "income": 50000, "credit_score": 700},
         )
 
         self.assertEqual(response.status_code, 500)
@@ -95,7 +95,7 @@ class TestPrediction(unittest.TestCase):
         response = self.client.post(
             "/predict",
             params={"model_name": "test", "model_version": "v1"},
-            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 12},
+            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 12, "income": 50000, "credit_score": 700},
         )
 
         self.assertEqual(response.status_code, 503)
@@ -108,7 +108,7 @@ class TestPrediction(unittest.TestCase):
         response = self.client.post(
             "/predict",
             params={"model_name": "test", "model_version": "v1"},
-            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 12},
+            json={"age": 30, "monthly_spend": 50.0, "tenure_months": 12, "income": 50000, "credit_score": 700},
         )
 
         self.assertEqual(response.status_code, 404)

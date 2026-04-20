@@ -60,7 +60,7 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
             lambda: self.client.post(
                 "/predict",
                 params={"model_name": "m1", "model_version": "v1"},
-                json={"age": 30, "monthly_spend": 100.0, "tenure_months": 5},
+                json={"age": 30, "monthly_spend": 100.0, "tenure_months": 5, "income": 50000, "credit_score": 700},
             ),
         )
 

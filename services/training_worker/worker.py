@@ -55,8 +55,6 @@ async def process_job(job):
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
         data_path = f"/tmp/{dataset_name}"
         os.makedirs("/tmp", exist_ok=True)
-        if not os.path.exists(data_path):
-            raise FileNotFoundError(f"Dataset not found at {data_path}")
 
         log.info(f"Downloading to {data_path}")
         sync_retry(download_dataset, dataset_name=dataset_name, file_path=data_path)
@@ -117,9 +115,8 @@ async def process_job(job):
         metrics = run.data.metrics
         model_name = run.data.params["model_type"]
 
-        local_model_path = mlflow.artifacts.download_artifacts(
-            artifact_uri=f"runs:/{run_id}/model"
-        )
+        # Model is already saved locally by the training pipeline
+        local_model_path = "artifacts"
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"
