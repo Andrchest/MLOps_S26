@@ -66,7 +66,9 @@ async def test_fetch_model_bytes_other_error_propagates():
     model_name = "test_model"
     model_version = "v1"
 
-    with patch("load_model.get_model_from_minio", side_effect=Exception("Network error")):
+    with patch(
+        "load_model.get_model_from_minio", side_effect=Exception("Network error")
+    ):
         with pytest.raises(Exception, match="Network error"):
             await fetch_model_bytes(model_name, model_version)
 

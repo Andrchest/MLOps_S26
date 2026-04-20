@@ -22,6 +22,7 @@ class TestFetchRetry(unittest.IsolatedAsyncioTestCase):
 
         # Disable retry wait for faster tests
         from tenacity import retry
+
         # Get the retry decorator's settings
         mock_minio.side_effect = [
             Exception("fail1"),

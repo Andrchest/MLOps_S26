@@ -25,6 +25,7 @@ class TestAPI(unittest.TestCase):
     def setUp(self):
         # Ensure model_executor exists on the module
         import services.inference_service.app as app_mod
+
         if not hasattr(app_mod, "model_executor"):
             app_mod.model_executor = MagicMock()
 
@@ -45,6 +46,7 @@ class TestAPI(unittest.TestCase):
             return func(*args)
 
         import services.inference_service.app as app_mod
+
         app_mod.model_executor = MagicMock()
         app_mod.model_executor.run_in_executor = MagicMock(
             side_effect=side_effect_executor
@@ -93,13 +95,15 @@ class TestAPI(unittest.TestCase):
             return func(*args)
 
         import services.inference_service.app as app_mod
+
         app_mod.model_executor = MagicMock()
         app_mod.model_executor.run_in_executor = MagicMock(
             side_effect=side_effect_executor
         )
 
         with patch(
-            "services.inference_service.app._run_prediction", side_effect=Exception("Unexpected error")
+            "services.inference_service.app._run_prediction",
+            side_effect=Exception("Unexpected error"),
         ):
             payload = {"age": 25, "monthly_spend": 50.0, "tenure_months": 12}
             response = self.client.post(

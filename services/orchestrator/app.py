@@ -11,7 +11,6 @@ from dataset_service import (
     storage_client,
 )
 
-
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 app = FastAPI()

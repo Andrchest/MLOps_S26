@@ -9,12 +9,12 @@ Run with: pytest tests/integration/ -v
 """
 
 import pytest
+import asyncio
 import httpx
 import asyncpg
 import time
 import subprocess
 from typing import Optional
-
 
 # =========================
 # Configuration

@@ -10,7 +10,6 @@ from minio import Minio
 from minio.error import S3Error
 from pydantic import BaseModel
 
-
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")

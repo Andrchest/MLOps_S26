@@ -66,15 +66,21 @@ async def test_process_job_success(mock_db, mock_minio_client):
     mock_client = MM()
     mock_client.search_runs.return_value = [mock_run]
 
-    with patch("worker.db", mock_db), \
-         patch("worker.minio_client", mock_minio_client), \
-         patch("worker.subprocess.run", return_value=mock_result), \
-         patch("worker.MlflowClient", return_value=mock_client), \
-         patch("worker.mlflow.get_experiment_by_name", return_value=mock_exp), \
-         patch("worker.mlflow.artifacts.download_artifacts", return_value="/tmp/model_dir"), \
-         patch("worker.asyncio.sleep", new_callable=AsyncMock), \
-         patch("os.path.exists", return_value=True), \
-         patch.object(shutil, "move"):
+    with patch("worker.db", mock_db), patch(
+        "worker.minio_client", mock_minio_client
+    ), patch("worker.subprocess.run", return_value=mock_result), patch(
+        "worker.MlflowClient", return_value=mock_client
+    ), patch(
+        "worker.mlflow.get_experiment_by_name", return_value=mock_exp
+    ), patch(
+        "worker.mlflow.artifacts.download_artifacts", return_value="/tmp/model_dir"
+    ), patch(
+        "worker.asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ), patch.object(
+        shutil, "move"
+    ):
 
         mock_db.get_job.return_value = None  # No stuck jobs to recover
 
@@ -98,11 +104,13 @@ async def test_process_job_pipeline_failure(mock_db, mock_minio_client):
     mock_result.returncode = 1
     mock_result.stderr = "Pipeline error"
 
-    with patch("worker.db", mock_db), \
-         patch("worker.minio_client", mock_minio_client), \
-         patch("worker.subprocess.run", return_value=mock_result), \
-         patch("worker.asyncio.sleep", new_callable=AsyncMock), \
-         patch("os.path.exists", return_value=True):
+    with patch("worker.db", mock_db), patch(
+        "worker.minio_client", mock_minio_client
+    ), patch("worker.subprocess.run", return_value=mock_result), patch(
+        "worker.asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ):
 
         mock_db.get_job.return_value = None
 
@@ -118,7 +126,7 @@ async def test_worker_loop_calls_process():
     from unittest.mock import patch, MagicMock as MM
 
     job = {"job_id": 1, "dataset_name": "ds", "dataset_id": "id"}
-    
+
     mock_db = MM()
     mock_db.get_job = AsyncMock(return_value=job)
     mock_db.update_status = AsyncMock()
@@ -129,12 +137,15 @@ async def test_worker_loop_calls_process():
     mock_minio.download_dataset = MM()
     mock_minio.save_model_to_minio = MM(return_value="minio://model.joblib")
 
-    with patch("worker.db", mock_db), \
-         patch("worker.minio_client", mock_minio), \
-         patch("worker.process_job", new_callable=AsyncMock) as mock_process, \
-         patch("worker.asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
-         patch("worker.logging"), \
-         patch("worker.asyncio", module=asyncio):
+    with patch("worker.db", mock_db), patch("worker.minio_client", mock_minio), patch(
+        "worker.process_job", new_callable=AsyncMock
+    ) as mock_process, patch(
+        "worker.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep, patch(
+        "worker.logging"
+    ), patch(
+        "worker.asyncio", module=asyncio
+    ):
 
         mock_sleep.side_effect = [None, None, asyncio.CancelledError("Stop")]
 
