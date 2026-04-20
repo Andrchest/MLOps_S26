@@ -5,7 +5,9 @@ WORKDIR /app
 COPY services/training_worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/training_worker/ .
-COPY pipelines/ ./pipelines/
+COPY services/ services/
+COPY pipelines/ pipelines/
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV PYTHONPATH=/app
+
+CMD ["uvicorn", "services.training_worker.app:app", "--host", "0.0.0.0", "--port", "8000"]
