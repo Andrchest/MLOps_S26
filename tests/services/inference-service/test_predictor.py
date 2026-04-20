@@ -5,7 +5,7 @@ from pathlib import Path
 
 current_file = Path(__file__).resolve()
 project_root = current_file.parents[3]
-file_path = project_root / "services" / "inference-service" / "predictor.py"
+file_path = project_root / "services" / "inference_service" / "predictor.py"
 
 spec = importlib.util.spec_from_file_location("predictor", str(file_path))
 predictor_module = importlib.util.module_from_spec(spec)

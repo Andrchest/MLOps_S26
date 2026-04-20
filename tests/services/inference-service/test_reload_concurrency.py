@@ -9,7 +9,7 @@ from pathlib import Path
 # --- Path Logic ---
 current_file = Path(__file__).resolve()
 # Adjusted to find the service directory correctly
-app_dir = current_file.parents[3] / "services" / "inference-service"
+app_dir = current_file.parents[3] / "services" / "inference_service"
 app_path = app_dir / "app.py"
 
 if str(app_dir) not in sys.path:

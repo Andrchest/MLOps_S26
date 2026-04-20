@@ -21,14 +21,12 @@ minio_client = Minio(
     secure=False,
 )
 
-for i in range(3):
-    try:
-        buckets = minio_client.list_buckets()
-        logging.info(f"Found buckets: {[b.name for b in buckets]}")
-        break
-    except Exception as e:
-        logging.warning(f"MinIO connection attempt {i + 1} failed: {e}")
-        time.sleep(2)
+# List buckets at startup (non-blocking, ignore errors)
+try:
+    buckets = minio_client.list_buckets()
+    logging.info(f"Found buckets: {[b.name for b in buckets]}")
+except Exception as e:
+    logging.warning(f"MinIO connection failed at startup: {e}")
 
 
 def download_dataset(dataset_name: str, file_path: str, bucket=None):

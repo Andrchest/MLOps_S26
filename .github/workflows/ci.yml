@@ -41,7 +41,7 @@ jobs:
     strategy:
       matrix:
         service:
-          - inference-service
+          - inference_service
           - monitoring-service
           - orchestrator
           - training_worker
@@ -49,9 +49,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Build inference-service
-        if: matrix.service == 'inference-service'
-        run: docker build -t mlops/inference-service:test -f services/inference-service/Dockerfile .
+      - name: Build inference_service
+        if: matrix.service == 'inference_service'
+        run: docker build -t mlops/inference_service:test -f services/inference_service/Dockerfile .
 
       - name: Build monitoring-service
         if: matrix.service == 'monitoring-service'

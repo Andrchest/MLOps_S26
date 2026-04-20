@@ -53,8 +53,8 @@ services:
       - mlflow
       - minio
 
-  inference-service:
-    build: ./services/inference-service
+  inference_service:
+    build: ./services/inference_service
     env_file: .env
     ports:
       - "8001:8000"
