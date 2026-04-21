@@ -131,3 +131,93 @@ def get_dataset(dataset_id: int):
     if dataset is None:
         raise HTTPException(status_code=404, detail="Dataset not found.")
     return dataset
+
+
+@app.get("/models/{model_name}/deployments")
+async def get_deployment_name(model_name: str):
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+
+    async with db_pool.acquire() as conn:
+        models = await conn.fetch(
+            """
+            SELECT * FROM deployments
+            WHERE model_name = $1
+            ORDER BY deployment_id DESC
+            """,
+            model_name,
+        )
+    if not models:
+        raise HTTPException(status_code=404, detail="Model not found.")
+    return [dict(m) for m in models]
+
+
+@app.get("/deployments/{deployment_id}")
+async def get_deployment_id(deployment_id: int):
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        deployment = await conn.fetchrow(
+            """
+            SELECT * 
+            from deployments
+            WHERE deployment_id = $1
+            """,
+            deployment_id,
+        )
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment is not available.")
+    return dict(deployment)
+
+
+@app.post("/deployments/{deployment_id}/rollback")
+async def deployment_rollback(deployment_id: int):
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        current_vers = await conn.fetchrow(
+            """
+            SELECT model_name, model_version
+            from deployments
+            WHERE deployment_id = $1
+            """,
+            deployment_id,
+        )
+
+        if not current_vers:
+            raise HTTPException(status_code=404, detail="Deployment not found.")
+
+        model_name = current_vers["model_name"]
+        previous_vers = await conn.fetchrow(
+            """
+            SELECT deployment_id, model_name, model_version
+            FROM deployments
+            WHERE model_name = $1 AND deployment_id < $2
+            ORDER BY deployment_id DESC
+            LIMIT 1
+        """,
+            model_name,
+            deployment_id,
+        )
+        if not previous_vers:
+            raise HTTPException(
+                status_code=404, detail="Previous deployment is not available."
+            )
+
+        previous = previous_vers["model_version"]
+
+        rolled_vers_id = await conn.fetchval(
+            """
+            INSERT INTO deployments (model_name, model_version, status)
+            VALUES ($1, $2, 'rolled_back')
+            RETURNING deployment_id
+            """,
+            model_name,
+            previous,
+        )
+        return {
+            "status": "rolled back successfully",
+            "deployment_id": rolled_vers_id,
+            "model_name": model_name,
+            "model_version": previous,
+        }

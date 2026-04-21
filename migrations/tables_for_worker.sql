@@ -30,5 +30,14 @@ CREATE TABLE IF NOT EXISTS prod_models (
     model_name TEXT,
     model_version TEXT,
     PRIMARY KEY (model_name)
-)
+);
 
+
+CREATE TABLE IF NOT EXISTS deployments (
+    deployment_id SERIAL PRIMARY KEY,
+    model_name TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    status TEXT NOT NULL, --flag for rollback
+    created_at TIMESTAMP DEFAULT now()
+
+);
