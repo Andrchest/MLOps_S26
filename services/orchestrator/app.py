@@ -1,13 +1,23 @@
-from fastapi import FastAPI
-import asyncpg
+import logging
 import os
 
-app = FastAPI()
+import asyncpg
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
+from dataset_service import (
+    DatasetRecord,
+    dataset_registry,
+    register_uploaded_dataset,
+    storage_client,
+)
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+app = FastAPI()
 db_pool = None
 
 
-async def init_db():
+async def init_db() -> None:
     global db_pool
     db_pool = await asyncpg.create_pool(
         user=os.getenv("POSTGRES_USER", "mlops"),
@@ -19,13 +29,17 @@ async def init_db():
 
 
 @app.on_event("startup")
-async def startup():
-    await init_db()
+async def startup() -> None:
+    try:
+        await init_db()
+    except Exception as exc:
+        logging.warning("Failed to initialize database pool: %s", exc)
 
 
 @app.on_event("shutdown")
-async def shutdown():
-    await db_pool.close()
+async def shutdown() -> None:
+    if db_pool is not None:
+        await db_pool.close()
 
 
 @app.get("/health")
@@ -33,9 +47,25 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/train/create")
-async def train(dataset_id: int):
+@app.post("/train", status_code=201)
+async def train(dataset_name: str, dataset_id: int):
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+
     async with db_pool.acquire() as conn:
+        # Idempotency: check if exact same request was already processed
+        existing = await conn.fetchval(
+            """
+            SELECT job_id FROM jobs
+            WHERE dataset_name = $1 AND dataset_id = $2 AND status = 'pending'
+            LIMIT 1
+            """,
+            dataset_name,
+            dataset_id,
+        )
+        if existing:
+            return {"job_id": existing, "status": "pending"}
+
         job_id = await conn.fetchval(
             """
             INSERT INTO jobs (dataset_id, status)
@@ -45,11 +75,14 @@ async def train(dataset_id: int):
             dataset_id,
         )
 
-        return f"job_id: {job_id}"
+    return {"job_id": job_id, "status": "pending"}
 
 
 @app.get("/jobs/{job_id}")
 async def get_status(job_id: int):
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+
     async with db_pool.acquire() as conn:
         status = await conn.fetchval(
             """
@@ -60,53 +93,41 @@ async def get_status(job_id: int):
             job_id,
         )
 
-        return {"job_id": job_id, "status": status}
+    return {"job_id": job_id, "status": status}
 
 
-@app.post("/datasets")
-async def register_dataset(dataset_id: int, dataset_name: str, dataset_version: str):
-    async with db_pool.acquire() as conn:
-        try:
-            dataset = await conn.execute(
-                """
-                INSERT INTO datasets (dataset_id, dataset_name, dataset_version)
-                VALUES ($1, $2, $3)
-                RETURNING dataset_id, dataset_name
-                """,
-                dataset_id,
-                dataset_name,
-                dataset_version,
-            )
-            return f"register dataset: {dataset} OK"
-        except BaseException as e:
-            return f"FATAL: {e}"
+@app.post("/datasets", response_model=DatasetRecord)
+async def upload_and_register_dataset(
+    file: UploadFile = File(...),
+    name: str | None = Form(default=None),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Dataset file name is required.")
 
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV datasets are supported.")
 
-@app.post("/models/promote")
-async def promote_model(model_name: str, model_version: str):
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT *
-            FROM trained_models
-            WHERE model_name=$1 AND model_version=$2
-            """,
-            model_name,
-            model_version,
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Uploaded dataset is empty.")
+
+    try:
+        return register_uploaded_dataset(
+            filename=file.filename,
+            payload=payload,
+            content_type=file.content_type or "text/csv",
+            name=name,
         )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to upload dataset to object storage: {exc}",
+        ) from exc
 
-    if not row:
-        return {"error": "model not found"}
 
-    await conn.execute(
-        """
-        INSERT INTO prod_models (model_name, model_version)
-        VALUES ($1, $2)
-        ON CONFLICT (model_name)
-        DO UPDATE SET model_version = EXCLUDED.model_version
-        """,
-        row["model_name"],
-        row["model_version"],
-    )
-
-    return {"status": "model promoted"}
+@app.get("/datasets/{dataset_id}", response_model=DatasetRecord)
+def get_dataset(dataset_id: int):
+    dataset = dataset_registry.get(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Dataset not found.")
+    return dataset

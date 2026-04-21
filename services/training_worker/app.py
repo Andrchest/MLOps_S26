@@ -3,10 +3,10 @@ import asyncio
 import logging
 import os
 import sys
-import db
+import services.training_worker.db as db
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from worker import worker_loop
+from services.training_worker.worker import worker_loop
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 

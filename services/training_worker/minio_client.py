@@ -2,6 +2,7 @@ from minio import Minio
 import logging
 import os
 import time
+import socket
 
 logging.basicConfig(level=logging.INFO)
 
@@ -20,30 +21,39 @@ minio_client = Minio(
     secure=False,
 )
 
-for i in range(3):
-    try:
-        buckets = minio_client.list_buckets()
-        logging.info(f"Found buckets: {[b.name for b in buckets]}")
-        break
-    except Exception as e:
-        logging.warning(f"MinIO connection attempt {i + 1} failed: {e}")
-        time.sleep(2)
+# List buckets at startup (non-blocking, ignore errors)
+try:
+    buckets = minio_client.list_buckets()
+    logging.info(f"Found buckets: {[b.name for b in buckets]}")
+except Exception as e:
+    logging.warning(f"MinIO connection failed at startup: {e}")
 
 
 def download_dataset(dataset_name: str, file_path: str, bucket=None):
     if bucket is None:
         bucket = DATASETS_BUCKET
+
+    if not dataset_name or "/" in dataset_name or ".." in dataset_name:
+        raise ValueError(f"Invalid dataset_name: {dataset_name}")
+
+    if os.path.exists(file_path):
+        raise FileExistsError(f"File already exists: {file_path}")
+
+    logging.info(f"Downloading dataset {dataset_name} -> {file_path}")
+
     for i in range(3):
         try:
             minio_client.fget_object(
                 bucket_name=bucket, object_name=dataset_name, file_path=file_path
             )
+            logging.info(f"Dataset downloaded: {file_path}")
             return
         except Exception as e:
             logging.warning(f"Download attempt {i + 1} failed: {e}")
             if i < 2:
                 time.sleep(2)
             else:
+                logging.error(f"Failed to download dataset: {dataset_name}")
                 raise
 
 
@@ -70,6 +80,8 @@ def save_model_to_minio(local_model_path, model_name, model_version):
 
     logging.info(f"Saving model to MinIO: {object_path} from {file_path}")
     try:
+        socket.setdefaulttimeout(10)
+
         minio_client.fput_object(
             bucket_name=MODELS_BUCKET,
             object_name=object_path,

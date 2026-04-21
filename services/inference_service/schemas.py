@@ -6,6 +6,8 @@ class InputData(BaseModel):
     age: int
     monthly_spend: float
     tenure_months: int
+    income: float
+    credit_score: int
 
 
 class Prediction(BaseModel):

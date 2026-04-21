@@ -1,33 +1,32 @@
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-import importlib.util
 import sys
 from pathlib import Path
 
 current_file = Path(__file__).resolve()
-app_dir = current_file.parents[3] / "services" / "inference-service"
-app_path = app_dir / "app.py"
+project_root = current_file.parents[3]
+app_dir = project_root / "services" / "inference_service"
 
+# Ensure paths are set up for imports
 if str(app_dir) not in sys.path:
     sys.path.insert(0, str(app_dir))
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
+# Import using proper package path
+from services.inference_service.app import app
+from services.inference_service import load_model
 
-spec = importlib.util.spec_from_file_location("app_module", str(app_path))
-app_module = importlib.util.module_from_spec(spec)
-sys.modules["app_module"] = app_module
-spec.loader.exec_module(app_module)
-
-application = app_module.app
+application = app
 
 
 class TestReload(unittest.TestCase):
     def setUp(self):
-        self.mock_pool = AsyncMock()
+        from services.inference_service import app as app_mod
 
-        self.patcher = patch("asyncpg.create_pool", new_callable=AsyncMock)
-        self.mock_create_pool = self.patcher.start()
-        self.mock_create_pool.return_value = self.mock_pool
+        if not hasattr(app_mod, "model_executor"):
+            app_mod.model_executor = MagicMock()
 
         self.test_ctx = TestClient(application)
         self.client = self.test_ctx.__enter__()
@@ -36,25 +35,24 @@ class TestReload(unittest.TestCase):
         self.test_ctx.__exit__(None, None, None)
 
     def test_reload_clears_cache_and_replaces_executor(self):
-        app_module._MODEL_BYTES_CACHE["test_key"] = b"test_data"
-        self.assertEqual(len(app_module._MODEL_BYTES_CACHE), 1)
+        from services.inference_service import app as app_mod
 
-        # Capture the reference to the original executor
-        old_executor = getattr(app_module, "model_executor", None)
-        self.assertIsNotNone(
-            old_executor, "model_executor should be initialized by lifespan"
-        )
+        app_mod._MODEL_BYTES_CACHE["test_key"] = b"test_data"
+        self.assertEqual(len(app_mod._MODEL_BYTES_CACHE), 1)
 
-        # Trigger reload
-        response = self.client.get("/reload")
+        old_executor = getattr(app_mod, "model_executor", None)
+        self.assertIsNotNone(old_executor, "model_executor should be initialized")
+
+        # Trigger reload with POST
+        response = self.client.post("/reload")
 
         self.assertEqual(response.status_code, 200)
 
         # Verify cache is now empty
-        self.assertEqual(len(app_module._MODEL_BYTES_CACHE), 0)
+        self.assertEqual(len(app_mod._MODEL_BYTES_CACHE), 0)
 
         # Verify executor was replaced
-        new_executor = app_module.model_executor
+        new_executor = app_mod.model_executor
         self.assertIsNot(
             new_executor, old_executor, "Executor should be a new instance after reload"
         )

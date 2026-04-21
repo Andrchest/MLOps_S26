@@ -5,6 +5,8 @@ sqlalchemy
 psycopg2-binary
 mlflow
 boto3
+minio
+python-multipart
 pandas
 scikit-learn
 numpy

@@ -39,6 +39,46 @@ Once running, services are accessible at:
 
 ---
 
+## Running CI Locally with `act`
+
+You can run GitHub Actions workflows locally using [act](https://github.com/nektos/act).
+
+### 1. Install act
+```bash
+# macOS
+brew install act
+
+# Linux
+curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+```
+
+### 2. Configure act (recommended)
+Create `.actrc` in project root:
+```bash
+-P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
+```
+
+This ensures `setup-python` action works correctly in the Docker container.
+
+### 3. Run workflows
+```bash
+# Run all jobs
+act
+
+# Run specific job
+act -j lint-and-test
+
+# Dry run
+act --dryrun
+```
+
+### 4. Build Docker images locally
+```bash
+act -j docker-build-check
+```
+
+---
+
 ## System Architecture & Services
 The platform is built on a microservices architecture, containerized via Docker.
 
