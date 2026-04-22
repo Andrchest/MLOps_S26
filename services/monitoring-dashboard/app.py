@@ -1,174 +1,198 @@
-from typing import Any
-
+import streamlit as st
 import pandas as pd
-import requests
 
-from db import get_connection
+from db import check_db_health
+from repository import (
+    get_job_status_counts,
+    get_jobs,
+    get_models,
+    get_recent_prediction_logs,
+    get_total_jobs,
+    get_total_models,
+    get_datasets,
+    get_deployments,
+    get_latency_stats,
+    get_prediction_status_distribution,
+    get_service_health,
+    get_total_predictions,
+    get_successful_predictions,
+    get_failed_predictions,
+    get_prediction_trend,
+)
+from ui import render_table, render_metric, render_health_table
 
+st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
-# ----------------------
-# Core helper
-# ----------------------
-def safe_query_to_df(query: str) -> dict[str, Any]:
-    try:
-        with get_connection() as conn:
-            df = pd.read_sql_query(query, conn)
-        return {"ok": True, "data": df, "error": None}
-    except Exception as exc:
-        return {"ok": False, "data": pd.DataFrame(), "error": str(exc)}
+st.title("Monitoring Dashboard")
+st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
 
+page = st.sidebar.radio(
+    "Navigate",
+    [
+        "System Overview",
+        "Jobs",
+        "Datasets",
+        "Models",
+        "Deployments",
+        "Monitoring",
+        "System Health",
+    ],
+)
 
-# ----------------------
-# Jobs
-# ----------------------
-def get_jobs():
-    return safe_query_to_df("""
-        SELECT job_id, dataset_name, dataset_id, status
-        FROM jobs
-        ORDER BY job_id DESC
-        LIMIT 100
-    """)
+db_ok, db_error = check_db_health()
 
+if not db_ok:
+    st.error(f"Database unavailable: {db_error}")
+    st.info("The dashboard is running, but DB-backed data cannot be loaded.")
+    st.stop()
 
-def get_job_status_counts():
-    return safe_query_to_df("""
-        SELECT status, COUNT(*) AS count
-        FROM jobs
-        GROUP BY status
-        ORDER BY status
-    """)
+if page == "System Overview":
+    st.header("System Overview")
 
+    jobs_total = get_total_jobs()
+    models_total = get_total_models()
 
-def get_total_jobs():
-    return safe_query_to_df("SELECT COUNT(*) AS total_jobs FROM jobs")
+    col1, col2 = st.columns(2)
 
+    with col1:
+        if jobs_total["ok"] and not jobs_total["data"].empty:
+            render_metric("Total Jobs", int(jobs_total["data"].iloc[0]["total_jobs"]))
+        else:
+            st.warning("Unable to load jobs total.")
 
-# ----------------------
-# Models
-# ----------------------
-def get_models():
-    return safe_query_to_df("""
-        SELECT job_id, model_name, model_version, model_path, metrics, parameters
-        FROM trained_models
-        ORDER BY job_id DESC
-        LIMIT 100
-    """)
+    with col2:
+        if models_total["ok"] and not models_total["data"].empty:
+            render_metric(
+                "Total Models",
+                int(models_total["data"].iloc[0]["total_models"]),
+            )
+        else:
+            st.warning("Unable to load models total.")
 
+    render_table(
+        get_job_status_counts(),
+        "Job Status Distribution",
+        "No jobs available.",
+    )
 
-def get_total_models():
-    return safe_query_to_df("SELECT COUNT(*) AS total_models FROM trained_models")
+    render_table(
+        get_recent_prediction_logs(),
+        "Recent Prediction Logs",
+        "No prediction logs available.",
+    )
 
+elif page == "Jobs":
+    st.header("Jobs")
+    render_table(get_jobs(), "Jobs", "No jobs found.")
 
-# ----------------------
-# Prediction Logs (Monitoring)
-# ----------------------
-def get_recent_prediction_logs():
-    return safe_query_to_df("""
-        SELECT request_id, timestamp, model_version, model_name, latency_ms, status
-        FROM prediction_logs
-        ORDER BY timestamp DESC
-        LIMIT 20
-    """)
+elif page == "Datasets":
+    st.header("Datasets")
+    datasets_result = get_datasets()
 
+    if datasets_result.get("source") == "placeholder":
+        st.info(datasets_result["message"])
+        st.caption("Awaiting backend/API support for datasets listing.")
+    else:
+        render_table(datasets_result, "Datasets", "No datasets found.")
 
-def get_latency_stats():
-    return safe_query_to_df("""
-        SELECT
-            AVG(latency_ms) AS avg_latency,
-            MAX(latency_ms) AS max_latency,
-            MIN(latency_ms) AS min_latency
-        FROM prediction_logs
-    """)
+elif page == "Models":
+    st.header("Models")
+    render_table(get_models(), "Trained Models", "No models found.")
 
+elif page == "Deployments":
+    st.header("Deployments")
+    deployments_result = get_deployments()
 
-def get_prediction_status_distribution():
-    return safe_query_to_df("""
-        SELECT status, COUNT(*) AS count
-        FROM prediction_logs
-        GROUP BY status
-    """)
+    if deployments_result.get("source") == "placeholder":
+        st.info(deployments_result["message"])
+        st.caption("Awaiting backend/API support for deployments listing.")
+    else:
+        render_table(deployments_result, "Deployments", "No deployments found.")
 
+elif page == "Monitoring":
+    st.header("Monitoring")
 
-# ----------------------
-# Datasets (placeholder until backend ready)
-# ----------------------
-def get_datasets():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Datasets backend contract is pending. \
-            This page is prepared for integration.",
-    }
+    total_predictions = get_total_predictions()
+    successful_predictions = get_successful_predictions()
+    failed_predictions = get_failed_predictions()
+    latency_stats = get_latency_stats()
+    prediction_status = get_prediction_status_distribution()
+    prediction_trend = get_prediction_trend()
 
+    col1, col2, col3, col4 = st.columns(4)
 
-# ----------------------
-# Deployments (placeholder)
-# ----------------------
-def get_deployments():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Deployments backend contract is pending. \
-            This page is prepared for integration.",
-    }
+    with col1:
+        if total_predictions["ok"] and not total_predictions["data"].empty:
+            render_metric(
+                "Total Predictions",
+                int(total_predictions["data"].iloc[0]["total_predictions"]),
+            )
+        else:
+            st.warning("N/A")
 
+    with col2:
+        if successful_predictions["ok"] and not successful_predictions["data"].empty:
+            render_metric(
+                "Successful",
+                int(successful_predictions["data"].iloc[0]["successful_predictions"]),
+            )
+        else:
+            st.warning("N/A")
 
-# ----------------------
-# System Health
-# ----------------------
-SERVICES = {
-    "orchestrator": "http://localhost:8000/health",
-    "inference": "http://localhost:8001/health",
-    "monitoring": "http://localhost:8002/health",
-}
+    with col3:
+        if failed_predictions["ok"] and not failed_predictions["data"].empty:
+            render_metric(
+                "Failed",
+                int(failed_predictions["data"].iloc[0]["failed_predictions"]),
+            )
+        else:
+            st.warning("N/A")
 
+    with col4:
+        if latency_stats["ok"] and not latency_stats["data"].empty:
+            avg_latency = latency_stats["data"].iloc[0]["avg_latency"]
+            render_metric(
+                "Avg Latency (ms)",
+                round(float(avg_latency), 2) if avg_latency is not None else "N/A",
+            )
+        else:
+            st.warning("N/A")
 
-def get_service_health():
-    results = []
+    render_table(
+        prediction_status,
+        "Prediction Status Distribution",
+        "No prediction status data found.",
+    )
 
-    for name, url in SERVICES.items():
-        try:
-            res = requests.get(url, timeout=2)
-            status = "healthy" if res.status_code == 200 else "degraded"
-        except Exception:
-            status = "down"
+    st.subheader("Predictions Over Time")
 
-        results.append({"service": name, "status": status})
+    if prediction_trend["ok"]:
+        trend_df = prediction_trend["data"]
 
-    return {"ok": True, "data": pd.DataFrame(results), "error": None}
+        if trend_df.empty:
+            st.info("No prediction trend data found.")
 
+        elif len(trend_df) < 2:
+            st.info("Not enough data points to render a trend chart yet.")
+            st.dataframe(trend_df, use_container_width=True, hide_index=True)
 
-def get_total_predictions():
-    return safe_query_to_df("""
-        SELECT COUNT(*) AS total_predictions
-        FROM prediction_logs
-    """)
+        else:
+            trend_df["day"] = pd.to_datetime(trend_df["day"])
+            trend_df = trend_df.sort_values("day")
+            trend_df = trend_df.set_index("day")
 
+            st.line_chart(trend_df, use_container_width=True)
 
-def get_successful_predictions():
-    return safe_query_to_df("""
-        SELECT COUNT(*) AS successful_predictions
-        FROM prediction_logs
-        WHERE status = 'success'
-    """)
+    else:
+        st.error(prediction_trend["error"])
 
+    render_table(
+        get_recent_prediction_logs(),
+        "Recent Prediction Logs",
+        "No prediction logs available.",
+    )
 
-def get_failed_predictions():
-    return safe_query_to_df("""
-        SELECT COUNT(*) AS failed_predictions
-        FROM prediction_logs
-        WHERE status = 'failed'
-    """)
-
-
-def get_prediction_trend():
-    return safe_query_to_df("""
-        SELECT DATE(timestamp) AS day, COUNT(*) AS count
-        FROM prediction_logs
-        GROUP BY DATE(timestamp)
-        ORDER BY day
-    """)
+elif page == "System Health":
+    st.header("System Health")
+    st.caption("Live status from service health endpoints.")
+    render_health_table(get_service_health())

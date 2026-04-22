@@ -98,13 +98,10 @@ def get_datasets():
         "data": pd.DataFrame(),
         "error": None,
         "source": "placeholder",
-<<<<<<< HEAD
         "message": "Datasets backend contract is pending. \
             This page is prepared for integration.",
-=======
-        "message": "Datasets backend contract is pending. This page is prepared for integration."
->>>>>>> 939cc4a (feat(dashboard): add datasets and deployments placeholder states)
     }
+
 
 # ----------------------
 # Deployments (placeholder)
@@ -115,12 +112,8 @@ def get_deployments():
         "data": pd.DataFrame(),
         "error": None,
         "source": "placeholder",
-<<<<<<< HEAD
         "message": "Deployments backend contract is pending. \
             This page is prepared for integration.",
-=======
-        "message": "Deployments backend contract is pending. This page is prepared for integration."
->>>>>>> 939cc4a (feat(dashboard): add datasets and deployments placeholder states)
     }
 
 
