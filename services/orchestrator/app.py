@@ -1,14 +1,38 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 import asyncpg
 import os
+import logging
+from shared.utils.logging_utils import JSONFormatter
+from asgi_correlation_id import CorrelationIdMiddleware, CorrelationIdFilter
+
 
 app = FastAPI()
+app.add_middleware(
+    CorrelationIdMiddleware,
+    header_name="X-Correlation-ID",
+    validator=None
+)
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+
+def setup_logging():
+    handler = logging.StreamHandler()
+    formatter = JSONFormatter(os.getenv("SERVICE_NAME", "orchestrator"))
+    handler.setFormatter(formatter)
+    # Add the filter to inject correlation_id into log records
+    handler.addFilter(CorrelationIdFilter())
+    logger.addHandler(handler)
+    logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+
 
 db_pool = None
 
 
 async def init_db():
     global db_pool
+    logger.info("Creating DB pool", extra={"event": "db_pool_creating"})
     db_pool = await asyncpg.create_pool(
         user=os.getenv("POSTGRES_USER", "mlops"),
         password=os.getenv("POSTGRES_PASSWORD", "mlops"),
@@ -16,41 +40,58 @@ async def init_db():
         host=os.getenv("POSTGRES_HOST", "postgres"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
     )
+    logger.info("DB pool created successfully", extra={"event": "db_pool_ready"})
 
 
 @app.on_event("startup")
 async def startup():
+    setup_logging()
+    logger.info("Orchestrator starting up...", extra={"event": "startup_initiated"})
     await init_db()
+    logger.info("Orchestrator startup complete.", extra={"event": "startup_finished"})
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    logger.info("Orchestrator shutting down...", extra={"event": "shutdown_initiated"})
     await db_pool.close()
+    logger.info("Orchestrator shutdown complete.", extra={"event": "shutdown_finished"})
 
 
 @app.get("/health")
 def health():
+    logger.debug("Health check requested", extra={"event": "health_check"})
     return {"status": "ok"}
 
 
 @app.post("/train")
 async def train(dataset_name: str, dataset_id: int):
-    async with db_pool.acquire() as conn:
-        job_id = await conn.fetchval(
-            """
-            INSERT INTO jobs (dataset_name, dataset_id, status)
-            VALUES ($1, $2, 'pending')
-            RETURNING job_id
-            """,
-            dataset_name,
-            dataset_id,
-        )
-
-        return {"job_id": job_id, "status": "pending"}
+    log_ctx = {"dataset_name": dataset_name, "dataset_id": dataset_id}
+    logger.info("Training job creation requested", extra={**log_ctx, "event": "train_request_received"})
+    try:
+        async with db_pool.acquire() as conn:
+            job_id = await conn.fetchval(
+                """
+                INSERT INTO jobs (dataset_name, dataset_id, status)
+                VALUES ($1, $2, 'pending')
+                RETURNING job_id
+                """,
+                dataset_name,
+                dataset_id,
+            )
+            logger.info(f"Training job created", extra={**log_ctx, "job_id": job_id, "event": "job_created_in_db"})
+            return {"job_id": job_id, "status": "pending"}
+    except Exception as e:
+        logger.error(f"Failed to create job: {e}", extra={**log_ctx, "event": "job_creation_failed"}, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create training job")
 
 
 @app.get("/jobs/{job_id}")
 async def get_status(job_id: int):
+    logger.info(
+        f"Checking status for job {job_id}", 
+        extra={"job_id": job_id, "event": "status_check_requested"}
+    )
     async with db_pool.acquire() as conn:
         status = await conn.fetchval(
             """
@@ -58,10 +99,15 @@ async def get_status(job_id: int):
             """,
             job_id,
         )
-
+        if status is None:
+            logger.warning(f"Job {job_id} not found", extra={"job_id": job_id, "event": "job_not_found"})
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        logger.info("Dataset registration started", extra={"event": "dataset_reg_started"})
         return {"job_id": job_id, "status": status}
 
 
 @app.post("/datasets")
 def register_dataset():
+    logger.info("Dataset registration started", extra={"event": "dataset_reg_started"})
     return {"status": "ok"}

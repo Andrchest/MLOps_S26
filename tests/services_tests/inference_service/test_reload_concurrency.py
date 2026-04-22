@@ -1,27 +1,10 @@
+import time
 import unittest
 import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
-import importlib.util
-import sys
-from pathlib import Path
-
-# --- Path Logic ---
-current_file = Path(__file__).resolve()
-# Adjusted to find the service directory correctly
-app_dir = current_file.parents[3] / "services" / "inference-service"
-app_path = app_dir / "app.py"
-
-if str(app_dir) not in sys.path:
-    sys.path.insert(0, str(app_dir))
-
-# Import the module
-spec = importlib.util.spec_from_file_location("app_module", str(app_path))
-app_module = importlib.util.module_from_spec(spec)
-sys.modules["app_module"] = app_module
-spec.loader.exec_module(app_module)
-
-application = app_module.app
+from services.inference_service import app
+from concurrent.futures import ThreadPoolExecutor
 
 
 class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
@@ -36,43 +19,37 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
         self.mock_pool.acquire.return_value = mock_acquire_ctx
         self.mock_pool.close = AsyncMock()
 
-        # NOTE: Use "app_module" as the target because that's the name in sys.modules
-        self.patcher_db = patch(
-            "app_module.asyncpg.create_pool", AsyncMock(return_value=self.mock_pool)
-        )
-        self.patcher_fetch = patch(
-            "app_module.fetch_model_bytes", AsyncMock(return_value=b"fake_bytes")
-        )
-
-        self.patcher_db.start()
-        self.patcher_fetch.start()
-
         # This triggers the FastAPI Lifespan (Startup/Shutdown)
-        self.test_ctx = TestClient(application)
+        self.test_ctx = TestClient(app.app)
         self.client = self.test_ctx.__enter__()
+
+        app.model_executor = ThreadPoolExecutor(max_workers=4)
 
     async def asyncTearDown(self):
         self.test_ctx.__exit__(None, None, None)
-        self.patcher_db.stop()
-        self.patcher_fetch.stop()
 
-    async def test_reload_during_active_request(self):
+    @patch('services.inference_service.minio_client.minio_client')
+    async def test_reload_during_active_request(self, mock_minio):
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"fake_model_content"
+        mock_minio.get_object.return_value = mock_response
+
+
         # Check if model_executor exists, if not, wait a tiny bit for startup
-        if not hasattr(app_module, "model_executor"):
+        if not hasattr(app, "model_executor"):
             self.fail(
                 "model_executor not found. Ensure it is initialized in the app's lifespan."
             )
 
-        old_executor = app_module.model_executor
+        old_executor = app.model_executor
 
         # Mock the prediction to be slow
-        async def slow_prediction_mock(*args, **kwargs):
-            await asyncio.sleep(2.0)  # Reduced from 5.0 for faster tests
+        def slow_prediction_mock(*args, **kwargs):
+            time.sleep(5.0)
             return 1, 0.99
 
-        with patch("app_module._run_prediction", side_effect=slow_prediction_mock):
+        with patch("services.inference_service.app._run_prediction", side_effect=slow_prediction_mock):
             loop = asyncio.get_running_loop()
-
             # Run the prediction in a background thread via the client
             predict_task = loop.run_in_executor(
                 None,
@@ -87,11 +64,11 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.5)
 
             # Trigger reload while predict is "sleeping"
-            reload_response = self.client.get("/reload")
+            reload_response = self.client.post("/reload")
             self.assertEqual(reload_response.status_code, 200)
 
             # Verify the executor was swapped
-            self.assertIsNot(app_module.model_executor, old_executor)
+            self.assertIsNot(app.model_executor, old_executor)
 
             # Wait for the original prediction to finish
             response = await predict_task

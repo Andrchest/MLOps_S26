@@ -13,3 +13,4 @@ minio
 cachetools
 scikit-learn
 tenacity
+asgi-correlation-id

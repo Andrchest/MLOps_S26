@@ -1,18 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-import importlib.util
-from pathlib import Path
-
-current_file = Path(__file__).resolve()
-project_root = current_file.parents[3]
-file_path = project_root / "services" / "inference-service" / "predictor.py"
-
-spec = importlib.util.spec_from_file_location("predictor", str(file_path))
-predictor_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(predictor_module)
-
-Predictor = predictor_module.Predictor
-get_cached_model = predictor_module.get_cached_model
+from services.inference_service import predictor
 
 
 class TestPredictor(unittest.TestCase):
@@ -26,12 +14,12 @@ class TestPredictor(unittest.TestCase):
         """Ensure the predictor parses input and returns (int, float)."""
         # Patch the joblib attribute directly on the loaded module object
         with patch.object(
-            predictor_module.joblib, "load", return_value=self.mock_model
+            predictor.joblib, "load", return_value=self.mock_model
         ):
-            predictor = Predictor(self.dummy_bytes)
+            model_predictor = predictor.Predictor(self.dummy_bytes)
             input_data = {"age": 30, "monthly_spend": 50.0, "tenure_months": 12}
 
-            label, score = predictor.predict(input_data)
+            label, score = model_predictor.predict(input_data)
 
             self.assertIsInstance(label, int)
             self.assertIsInstance(score, float)
@@ -39,19 +27,19 @@ class TestPredictor(unittest.TestCase):
 
     def test_model_caching(self):
         """Verify that get_cached_model actually uses the lru_cache."""
-        get_cached_model.cache_clear()
+        predictor.get_cached_model.cache_clear()
 
         # Patching the 'joblib' inside the module
         with patch.object(
-            predictor_module.joblib, "load", return_value=self.mock_model
+            predictor.joblib, "load", return_value=self.mock_model
         ) as mock_load:
             # First call: Should be a miss
-            get_cached_model(self.dummy_bytes)
-            self.assertEqual(get_cached_model.cache_info().misses, 1)
+            predictor.get_cached_model(self.dummy_bytes)
+            self.assertEqual(predictor.get_cached_model.cache_info().misses, 1)
 
             # Second call: Should be a hit
-            get_cached_model(self.dummy_bytes)
-            self.assertEqual(get_cached_model.cache_info().hits, 1)
+            predictor.get_cached_model(self.dummy_bytes)
+            self.assertEqual(predictor.get_cached_model.cache_info().hits, 1)
 
             # Ensure joblib.load was only called once
             self.assertEqual(mock_load.call_count, 1)

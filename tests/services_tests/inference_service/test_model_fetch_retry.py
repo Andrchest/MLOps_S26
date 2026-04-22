@@ -1,21 +1,10 @@
 import unittest
 from unittest.mock import patch
-import sys
-from pathlib import Path
-
-current_file = Path(__file__).resolve()
-app_dir = current_file.parents[3] / "services" / "inference-service"
-if str(app_dir) not in sys.path:
-    sys.path.insert(0, str(app_dir))
-
-with patch("minio_client.get_model_from_minio") as _unused_mock:
-    import load_model as load_model_module
-
-fetch_model_with_retry = load_model_module.fetch_model_with_retry
+from services.inference_service.load_model import fetch_model_with_retry
 
 
 class TestFetchRetry(unittest.IsolatedAsyncioTestCase):
-    @patch("load_model.get_model_from_minio")
+    @patch("services.inference_service.load_model.get_model_from_minio")
     async def test_retry_model_fetch(self, mock_minio):
         fetch_model_with_retry.retry.wait = lambda *args, **kwargs: 0
 

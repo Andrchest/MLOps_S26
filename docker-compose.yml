@@ -53,7 +53,7 @@ services:
       - minio
 
   inference-service:
-    build: ./services/inference-service
+    build: ./services/inference_service
     env_file: .env
     ports:
       - "8001:8000"

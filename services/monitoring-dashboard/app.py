@@ -1,4 +1,7 @@
 import streamlit as st
+import logging
+from shared.utils.logging_utils import JSONFormatter
+import os
 
 from db import check_db_health
 from repository import (
@@ -11,6 +14,20 @@ from repository import (
 )
 from ui import render_result
 
+
+logger = logging.getLogger(__name__)
+
+def setup_logging():
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = JSONFormatter(os.getenv("SERVICE_NAME", "monitoring-dashboard"))
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+
+setup_logging()
+logger.info("Monitoring Dashboard started", extra={"event": "dashboard_started"})
+
 st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
 st.title("Monitoring Dashboard")
@@ -21,9 +38,18 @@ page = st.sidebar.radio("Navigate", ["System Overview", "Jobs", "Models"])
 db_ok, db_error = check_db_health()
 
 if not db_ok:
+    logger.error("Database health check failed", extra={
+        "event": "db_health_check_failed", 
+        "error": str(db_error)}
+    )
     st.error(f"Database unavailable: {db_error}")
     st.info("The dashboard is running, but DB-backed data cannot be loaded.")
     st.stop()
+else:
+    logger.debug(
+        "Database health check passed", 
+        extra={"event": "db_health_check_passed"}
+    )
 
 if page == "System Overview":
     st.header("System Overview")
@@ -35,14 +61,30 @@ if page == "System Overview":
 
     with col1:
         if jobs_total["ok"] and not jobs_total["data"].empty:
+            logger.debug(
+                "Successfully fetch total jobs", 
+                extra={"event": "fetch_jobs_success"}
+            )
             st.metric("Total Jobs", int(jobs_total["data"].iloc[0]["total_jobs"]))
         else:
+            logger.warning(
+                "Failed to fetch total jobs", 
+                extra={"event": "fetch_jobs_failed"}
+            )
             st.warning("Unable to load jobs total.")
 
     with col2:
         if models_total["ok"] and not models_total["data"].empty:
+            logger.debug(
+                "Successfully fetch total models", 
+                extra={"event": "fetch_models_success"}
+            )
             st.metric("Total Models", int(models_total["data"].iloc[0]["total_models"]))
         else:
+            logger.warning(
+                "Failed to fetch total models", 
+                extra={"event": "fetch_models_failed"}
+            )
             st.warning("Unable to load models total.")
 
     render_result(
@@ -59,8 +101,26 @@ if page == "System Overview":
 
 elif page == "Jobs":
     st.header("Jobs")
-    render_result(get_jobs(), "Jobs", "No jobs found.")
+    result = get_jobs()
+    if result["ok"]:
+        logger.info("Jobs list loaded", extra={"event": "jobs_page_loaded"})
+    else:
+        logger.error("Failed to load jobs list", extra={"event": "jobs_page_failed"})
+    render_result(result, "Jobs", "No jobs found.")
 
 elif page == "Models":
     st.header("Models")
-    render_result(get_models(), "Trained Models", "No models found.")
+    models_result = get_models()
+    
+    if models_result["ok"]:
+        logger.info(
+            "Successfully fetched models list", 
+            extra={"event": "models_page_loaded", "count": len(models_result.get("data", []))}
+        )
+    else:
+        logger.error(
+            "Failed to fetch models list", 
+            extra={"event": "models_page_failed", "error": models_result.get("error")}
+        )
+        
+    render_result(models_result, "Trained Models", "No models found.")

@@ -2,58 +2,84 @@ import asyncio
 import subprocess
 import mlflow
 import os
+import logging
 from mlflow.tracking import MlflowClient
-from db import (
+
+
+from .db import (
     get_job,
     update_status,
     save_trained_model,
 )
-from minio_client import (
+from .minio_client import (
     download_dataset,
     save_model_to_minio,
 )
 
 POLL_INTERVAL = 5
 
+logger = logging.getLogger(__name__)
+
 
 async def worker_loop():
-    import logging
-    import sys
-
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
-    logging.info("WORKER LOOP STARTED")
+    logger.info("WORKER LOOP STARTED")
     while True:
         try:
             job = await get_job()
-            logging.info(f"Polled, got job: {job}")
-
+            
             if job:
+                logger.info(f"Job found, starting processing", extra={
+                    "event": "job_polled", 
+                    "job_id": job.get("job_id"),
+                    "dataset_id": job.get("dataset_id")
+                })
                 await process_job(job)
         except Exception as e:
-            logging.error(f"Worker loop error: {e}")
+            logger.error(
+                f"Worker loop critical error: {e}", 
+                extra={"event": "worker_loop_error"}, 
+                exc_info=True
+            )
 
         await asyncio.sleep(POLL_INTERVAL)
 
 
 async def process_job(job):
-    import logging
-
     job_id = job["job_id"]
     dataset_name = job["dataset_name"]
     dataset_id = job["dataset_id"]
-    import logging as log
     import shutil
 
+    job_context = {
+        "job_id": job_id,
+        "dataset_name": dataset_name,
+        "dataset_id": dataset_id,
+        "pipeline": "first_ml_baseline"
+    }
+
     try:
-        log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
         data_path = f"/tmp/{dataset_name}"
         os.makedirs("/tmp", exist_ok=True)
-        log.info(f"Downloading to {data_path}")
+        logger.info(
+            f"Downloading dataset", 
+            extra={
+                **job_context, 
+                "event": "dataset_download_start", 
+                "target_path": data_path
+            }
+        )
         download_dataset(dataset_name, data_path)
-        log.info(f"Dataset downloaded to {data_path}")
         csv_path = f"{data_path}.csv"
         shutil.move(data_path, csv_path)
-        log.info(f"Moved to {csv_path}")
+        logger.info(
+            f"Dataset ready for training", 
+            extra={**job_context, "event": "dataset_ready", "csv_path": csv_path}
+        )
+
+        logger.info(
+            f"Starting training pipeline", 
+            extra={**job_context, "event": "training_subprocess_start"}
+        )
         result = subprocess.run(
             [
                 "python",
@@ -66,14 +92,25 @@ async def process_job(job):
             capture_output=True,
             text=True,
         )
-        log.info(
-            f"Pipeline stdout: {result.stdout[:500] if result.stdout else 'empty'}"
-        )
-        if result.stderr:
-            log.warning(f"Pipeline stderr: {result.stderr[:500]}")
+        if result.stdout:
+            logger.info("Pipeline stdout snip", extra={**job_context, "stdout": result.stdout[:500]})
 
         if result.returncode != 0:
+            logger.error(
+                "Training pipeline failed", 
+                extra={
+                    **job_context, 
+                    "event": "training_subprocess_failed", 
+                    "stderr": result.stderr[:1000]
+                }
+            )
             raise Exception(f"Pipeline failed: {result.stderr}")
+        
+        elif result.stderr:
+            logger.warning(
+                "Pipeline completed with warnings in stderr", 
+                extra={**job_context, "event": "pipeline_warnings", "stderr": result.stderr[:500]}
+            )
 
         client = MlflowClient()
 
@@ -105,12 +142,13 @@ async def process_job(job):
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"
-        log.info(f"Model version: {model_version}")
 
         # Update status to mark the code part of saving model artifacts
-        log.info("Updating status to persisting")
         await update_status(job_id, "persisting")
-        log.info("Downloading artifacts from MLflow")
+        logger.info(
+            "Uploading model to MinIO", 
+            extra={**job_context, "event": "minio_upload_start", "model_version": model_version}
+        )
 
         model_path = save_model_to_minio(
             local_model_path=local_model_path,
@@ -128,13 +166,23 @@ async def process_job(job):
         )
 
         await update_status(job_id, "succeeded")
+        logger.info(f"Job completed successfully", extra={
+            **job_context, 
+            "event": "job_success", 
+            "model_version": model_version,
+            "metrics": metrics
+        })
 
     except Exception as e:
-        import logging
-
-        logging.error(f"Error processing job {job_id}: {e}", exc_info=True)
+        logger.error(f"Job processing failed", extra={
+            **job_context, 
+            "event": "job_failed", 
+        }, exc_info=True)
         try:
             await update_status(job_id, "failed")
         except Exception as update_err:
-            logging.error(f"Failed to update status: {update_err}")
+            logger.error(
+                f"Failed to update job status to failed", 
+                extra={**job_context, "event": "status_update_error"}
+            )
         # DO NOT re-raise the exception. Let the worker continue to the next job.
