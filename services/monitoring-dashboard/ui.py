@@ -46,6 +46,10 @@ def render_health_table(result):
 
     df = result["data"]
 
+    if df.empty:
+        st.info("No service health data available.")
+        return
+
     df["status"] = df["status"].apply(render_status_badge)
 
     st.dataframe(df, use_container_width=True, hide_index=True)

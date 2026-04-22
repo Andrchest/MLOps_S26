@@ -145,3 +145,34 @@ def get_service_health():
         "data": pd.DataFrame(results),
         "error": None
     }
+
+def get_total_predictions():
+    return safe_query_to_df("""
+        SELECT COUNT(*) AS total_predictions
+        FROM prediction_logs
+    """)
+
+
+def get_successful_predictions():
+    return safe_query_to_df("""
+        SELECT COUNT(*) AS successful_predictions
+        FROM prediction_logs
+        WHERE status = 'success'
+    """)
+
+
+def get_failed_predictions():
+    return safe_query_to_df("""
+        SELECT COUNT(*) AS failed_predictions
+        FROM prediction_logs
+        WHERE status = 'failed'
+    """)
+
+
+def get_prediction_trend():
+    return safe_query_to_df("""
+        SELECT DATE(timestamp) AS day, COUNT(*) AS count
+        FROM prediction_logs
+        GROUP BY DATE(timestamp)
+        ORDER BY day
+    """)
