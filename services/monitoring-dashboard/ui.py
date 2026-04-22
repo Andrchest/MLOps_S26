@@ -54,7 +54,6 @@ def render_health_table(result):
 
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-
 def render_placeholder(title: str, message: str) -> None:
     st.subheader(title)
     st.info(message)
