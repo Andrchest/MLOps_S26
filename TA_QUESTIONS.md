@@ -403,3 +403,256 @@ When TA asks about missing features, be honest and explain:
 *Generated: Apr 20, 2026*  
 *Branch: feature/week2-integration*  
 *Next review: Wednesday (Apr 22)*
+
+---
+
+## 8. MORE QUESTIONS TO ASK TA (Proactive)
+
+### 8.1 Grading Criteria Questions
+
+**Q11: "For the 'Functionality' grade (30%), what's the threshold for passing?"**
+**Context:** We have core features working but some planned features are missing. We want to know if missing deployment/retraining will hurt our grade significantly.
+
+**Why ask:** Helps us prioritize what to fix before the demo.
+
+---
+
+**Q12: "Does 'code clarity, inline comments' apply to all files or just core logic?"**
+**Context:** We have good comments in core files (worker.py, app.py) but less in tests and infrastructure files.
+
+**Why ask:** If comments are required everywhere, we need to add them.
+
+---
+
+**Q13: "For 'demonstration quality' (50%), what's better: showing all features working or showing fewer features with deep explanation?"**
+**Context:** We can demo the full flow (upload → train → predict) but can't demo deployment or retraining. Which approach is better?
+
+**Why ask:** Helps us decide what to include in the demo.
+
+---
+
+**Q14: "Is it acceptable to have a 'known bug' in the code if we document it and explain how we'd fix it?"**
+**Context:** We have `recover_stuck_jobs()` bug that resets all running jobs. It's documented in MERGE_LOG.md.
+
+**Why ask:** Shows we're honest about limitations and shows engineering judgment.
+
+---
+
+### 8.2 Scope Questions
+
+**Q15: "Does 'distributed set of services' require Kubernetes, or is Docker Compose sufficient?"**
+**Context:** We use Docker Compose with 8 services. No Kubernetes.
+
+**Why ask:** If K8s is required, we need to rewrite deployment.
+
+---
+
+**Q16: "Does 'automated training' mean the system should automatically trigger training on new data, or is manual triggering via API sufficient?"**
+**Context:** We have manual triggering (`POST /train`). No automatic trigger on new data.
+
+**Why ask:** Clarifies if we need to implement event-driven training.
+
+---
+
+**Q17: "Does 'performance monitoring' require real-time dashboards, or is batch analysis of prediction logs sufficient?"**
+**Context:** Our dashboard shows prediction logs but doesn't do real-time analysis.
+
+**Why ask:** Clarifies the depth of monitoring required.
+
+---
+
+**Q18: "Does 'robustness under failures' require circuit breakers, or is retry logic with exponential backoff sufficient?"**
+**Context:** We have retry logic but no circuit breakers.
+
+**Why ask:** Circuit breakers are complex to implement. If retry logic is sufficient, we save significant effort.
+
+---
+
+**Q19: "Does 'changing data conditions' require drift detection, or is it sufficient to log prediction data and let users analyze it?"**
+**Context:** We log predictions but don't detect drift.
+
+**Why ask:** Drift detection is complex. If logging is sufficient, we save effort.
+
+---
+
+### 8.3 Technical Depth Questions
+
+**Q20: "For the 'experimental approach', do we need to run ablation studies, or are the integration tests sufficient?"**
+**Context:** We have integration tests but no ablation studies or performance benchmarks.
+
+**Why ask:** Ablation studies are time-consuming. If tests are sufficient, we save time.
+
+---
+
+**Q21: "Is it acceptable that the monitoring-service is a skeleton if the dashboard provides the same functionality?"**
+**Context:** monitoring-service only has `/health`. Dashboard provides monitoring UI.
+
+**Why ask:** Clarifies if we need to implement monitoring-service.
+
+---
+
+**Q22: "For 'model versioning', is storing the version string in MinIO sufficient, or do we need MLflow's model registry?"**
+**Context:** We store models in MinIO with version strings. No MLflow model registry.
+
+**Why ask:** Clarifies the depth of model versioning required.
+
+---
+
+**Q23: "Does 'data pipelines' require ETL (Extract, Transform, Load), or is just loading data into storage sufficient?"**
+**Context:** We have data loading (`POST /datasets`) but no transformation.
+
+**Why ask:** ETL is complex. If loading is sufficient, we save effort.
+
+---
+
+### 8.4 Presentation Questions
+
+**Q24: "For the oral presentation (20%), how much time should we spend on architecture vs. demo vs. Q&A?"**
+**Context:** We have 20% for oral presentation. We want to allocate time effectively.
+
+**Why ask:** Helps us prepare a balanced presentation.
+
+---
+
+**Q25: "Should we demo the system live, or is a recorded demo acceptable?"**
+**Context:** Live demos can fail. A recorded demo is more reliable.
+
+**Why ask:** Reduces risk of demo failure during presentation.
+
+---
+
+**Q26: "Can we show the test results as part of the demo, or should tests be discussed separately?"**
+**Context:** We have 53 passing tests. Showing test results demonstrates quality.
+
+**Why ask:** Tests are part of the evaluation criteria.
+
+---
+
+**Q27: "Should we include a 'known limitations' section in the presentation?"**
+**Context:** We have known bugs and missing features. Being honest shows maturity.
+
+**Why ask:** Shows engineering judgment and self-awareness.
+
+---
+
+### 8.5 Future Work Questions
+
+**Q28: "If we were to extend this project beyond the course, what would be the top 3 improvements?"**
+**Context:** Shows we've thought about production readiness.
+
+**Why ask:** Demonstrates deep understanding of the system.
+
+**Suggested answer:**
+1. Add CI/CD pipeline (GitHub Actions with Docker-in-Docker for integration tests)
+2. Add monitoring with Prometheus/Grafana (real-time metrics, alerts)
+3. Add Kubernetes deployment (horizontal scaling, self-healing)
+
+---
+
+**Q29: "What's the most common mistake students make on this project?"**
+**Context:** Helps us avoid common pitfalls.
+
+**Why ask:** Shows we're proactive about avoiding mistakes.
+
+---
+
+**Q30: "Are there any projects from previous years we can look at for reference?"**
+**Context:** Helps us understand the expected quality level.
+
+**Why ask:** Gives us a benchmark for our work.
+
+---
+
+### 8.6 Architecture Trade-off Questions
+
+**Q31: "Why did you choose FastAPI over Flask or Django?"**
+**Answer:** FastAPI has built-in async support, automatic OpenAPI docs, and Pydantic for data validation. Flask is simpler but lacks async. Django is full-featured but overkill for our needs.
+
+**Follow-up:** "What's the downside of FastAPI?"
+**Answer:** Smaller ecosystem than Flask/Django. Less third-party packages.
+
+---
+
+**Q32: "Why did you choose Streamlit for the dashboard instead of React or Vue?"**
+**Answer:** Streamlit is Python-native, requires no frontend knowledge, and is perfect for internal dashboards. React/Vue are better for public-facing apps but require more setup and maintenance.
+
+**Follow-up:** "What's the downside of Streamlit?"
+**Answer:** Limited customization, harder to scale for complex UIs, not suitable for public-facing apps.
+
+---
+
+**Q33: "Why did you choose Pytest over unittest?"**
+**Answer:** Pytest has better fixtures, parametrization, and plugin ecosystem. unittest is built-in but less flexible. For async tests, Pytest-asyncio is the standard.
+
+**Follow-up:** "What's the downside of Pytest?"
+**Answer:** Additional dependency. Not built-in to Python.
+
+---
+
+**Q34: "Why did you choose Docker Compose instead of bare metal or Kubernetes?"**
+**Answer:** Docker Compose is simple, works locally and in CI, and is sufficient for our scale. Kubernetes is overkill for a student project and adds significant operational complexity.
+
+**Follow-up:** "When would you choose Kubernetes?"
+**Answer:** When you need horizontal scaling, self-healing, or deployment to cloud providers.
+
+---
+
+**Q35: "Why did you choose scikit-learn for the baseline model instead of a deep learning framework?"**
+**Answer:** Scikit-learn is simple, well-documented, and sufficient for tabular data. Deep learning frameworks (PyTorch, TensorFlow) are overkill for our use case and require more data and compute.
+
+**Follow-up:** "What if the data was images or text?"
+**Answer:** We'd use PyTorch or TensorFlow. But for tabular data, scikit-learn is the right choice.
+
+---
+
+### 8.7 Testing Questions
+
+**Q36: "Why don't integration tests run in CI?"**
+**Answer:** CI runs in GitHub Actions which doesn't have Docker-in-Docker support. We'd need to use `act` locally or set up a self-hosted runner with Docker support.
+
+**Follow-up:** "How would you fix this?"
+**Answer:** Use `act` locally before pushing, or set up a self-hosted GitHub Actions runner with Docker.
+
+---
+
+**Q37: "Why do you have 8 skipped tests?"**
+**Answer:** Some tests are skipped because they require infrastructure we don't have (e.g., test_dataset_ingestion requires the data ingestion pipeline which is empty). We could implement these features, but they're lower priority.
+
+**Follow-up:** "Which tests are skipped?"
+**Answer:** test_dataset_ingestion, test_model_deployment, test_retraining_trigger, test_crash_recovery, test_degraded_mode_inference.
+
+---
+
+**Q38: "What's your test coverage percentage?"**
+**Answer:** We don't have coverage reports yet. We could add `pytest --cov` to get the percentage. Based on manual inspection, we estimate ~60% coverage.
+
+**Follow-up:** "Would you add coverage reports?"
+**Answer:** Yes, we'd add `pytest --cov` to CI and set a minimum coverage threshold (e.g., 80%).
+
+---
+
+### 8.8 Deployment Questions
+
+**Q39: "How would you deploy this to production?"**
+**Answer:** We'd use Kubernetes (EKS, GKE, or AKS) with:
+- PostgreSQL managed service (RDS, Cloud SQL)
+- MinIO on EC2 or S3
+- MLflow on EC2 or EKS
+- Services on EKS with horizontal pod autoscaling
+
+**Follow-up:** "What about zero-downtime deployments?"
+**Answer:** We'd use rolling updates with readiness probes. Each service would have a health check endpoint that returns 200 when ready.
+
+---
+
+**Q40: "How would you handle secrets in production?"**
+**Answer:** We'd use Kubernetes secrets or AWS Secrets Manager. The `.env` file is for local development only. In production, secrets would be injected as environment variables from a secrets manager.
+
+**Follow-up:** "Why not commit .env to git?"
+**Answer:** Secrets should never be committed to git. We use `.gitignore` to exclude `.env` and provide `.env.example` with placeholder values.
+
+---
+
+*Generated: Apr 20, 2026*  
+*Branch: feature/week2-integration*  
+*Next review: Wednesday (Apr 22)*
