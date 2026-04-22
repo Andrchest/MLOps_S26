@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd 
 
 from db import check_db_health
 from repository import (
@@ -156,15 +157,24 @@ elif page == "Monitoring":
     )
 
     st.subheader("Predictions Over Time")
+
     if prediction_trend["ok"]:
         trend_df = prediction_trend["data"]
+
         if trend_df.empty:
             st.info("No prediction trend data found.")
+
         elif len(trend_df) < 2:
             st.info("Not enough data points to render a trend chart yet.")
             st.dataframe(trend_df, use_container_width=True, hide_index=True)
+
         else:
-            st.line_chart(trend_df.set_index("day"))
+            trend_df["day"] = pd.to_datetime(trend_df["day"])
+            trend_df = trend_df.sort_values("day")
+            trend_df = trend_df.set_index("day")
+
+            st.line_chart(trend_df, use_container_width=True)
+
     else:
         st.error(prediction_trend["error"])
 
