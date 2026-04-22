@@ -93,16 +93,13 @@ def get_prediction_status_distribution():
 # Datasets (placeholder until backend ready)
 # ----------------------
 def get_datasets():
-    # TODO: replace with real table or API
     return {
         "ok": True,
-        "data": pd.DataFrame([
-            {"dataset_id": 1, "name": "customer_churn.csv"},
-            {"dataset_id": 2, "name": "fraud_data.csv"},
-        ]),
-        "error": None
+        "data": pd.DataFrame(),
+        "error": None,
+        "source": "placeholder",
+        "message": "Datasets backend contract is pending. This page is prepared for integration."
     }
-
 
 # ----------------------
 # Deployments (placeholder)
@@ -110,11 +107,10 @@ def get_datasets():
 def get_deployments():
     return {
         "ok": True,
-        "data": pd.DataFrame([
-            {"deployment_id": 1, "model": "churn_model_v1", "status": "active"},
-            {"deployment_id": 2, "model": "fraud_model_v2", "status": "inactive"},
-        ]),
-        "error": None
+        "data": pd.DataFrame(),
+        "error": None,
+        "source": "placeholder",
+        "message": "Deployments backend contract is pending. This page is prepared for integration."
     }
 
 
