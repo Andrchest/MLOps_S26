@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd 
+import pandas as pd
 
 from db import check_db_health
 from repository import (
@@ -134,11 +134,7 @@ elif page == "Monitoring":
         if successful_predictions["ok"] and not successful_predictions["data"].empty:
             render_metric(
                 "Successful",
-                int(
-                    successful_predictions["data"].iloc[0][
-                        "successful_predictions"
-                    ]
-                ),
+                int(successful_predictions["data"].iloc[0]["successful_predictions"]),
             )
         else:
             st.warning("N/A")

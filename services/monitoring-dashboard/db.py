@@ -21,6 +21,7 @@ def get_db_config() -> dict:
         "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
     }
 
+
 @contextmanager
 def get_connection() -> Generator:
     conn = None

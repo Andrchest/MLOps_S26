@@ -98,8 +98,10 @@ def get_datasets():
         "data": pd.DataFrame(),
         "error": None,
         "source": "placeholder",
-        "message": "Datasets backend contract is pending. This page is prepared for integration."
+        "message": "Datasets backend contract is pending. \
+            This page is prepared for integration.",
     }
+
 
 # ----------------------
 # Deployments (placeholder)
@@ -110,7 +112,8 @@ def get_deployments():
         "data": pd.DataFrame(),
         "error": None,
         "source": "placeholder",
-        "message": "Deployments backend contract is pending. This page is prepared for integration."
+        "message": "Deployments backend contract is pending. \
+            This page is prepared for integration.",
     }
 
 
@@ -136,11 +139,8 @@ def get_service_health():
 
         results.append({"service": name, "status": status})
 
-    return {
-        "ok": True,
-        "data": pd.DataFrame(results),
-        "error": None
-    }
+    return {"ok": True, "data": pd.DataFrame(results), "error": None}
+
 
 def get_total_predictions():
     return safe_query_to_df("""
