@@ -1,6 +1,8 @@
 import json
+import os
 
 db_pool = None
+RECOVERY_TIMEOUT_MINUTES = int(os.getenv("RECOVERY_TIMEOUT_MINUTES", 30))
 
 
 class JobStatus:
@@ -14,13 +16,19 @@ class JobStatus:
 async def recover_stuck_jobs():
     import logging
 
+    if db_pool is None:
+        logging.warning("DB pool is not initialized, skipping recovery")
+        return
+
     async with db_pool.acquire() as conn:
-        await conn.execute("""
+        result = await conn.execute(f"""
             UPDATE jobs
             SET status = 'pending'
             WHERE status = 'running'
-        """)
-    logging.info("Recovered stuck jobs")
+            AND created_at < NOW() - INTERVAL '{RECOVERY_TIMEOUT_MINUTES} minutes'
+            """)
+
+        logging.info(f"Recovered stuck jobs: {result}")
 
 
 async def get_job():

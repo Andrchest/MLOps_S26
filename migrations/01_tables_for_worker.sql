@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_id SERIAL PRIMARY KEY,
     dataset_name TEXT NOT NULL,
     dataset_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
     status TEXT DEFAULT 'pending'
 );
 
