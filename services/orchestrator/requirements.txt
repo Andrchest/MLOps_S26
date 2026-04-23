@@ -10,3 +10,4 @@ scikit-learn
 numpy
 requests
 asyncpg
+asgi-correlation-id

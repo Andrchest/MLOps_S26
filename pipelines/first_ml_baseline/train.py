@@ -1,7 +1,8 @@
 """Simple baseline training script for tabular binary classification.
 
 Usage:
-    python pipelines/first_ml_baseline/train.py --data pipelines/first_ml_baseline/data/breast_cancer.csv
+    python pipelines/first_ml_baseline/train.py \
+    --data pipelines/first_ml_baseline/data/breast_cancer.csv
 """
 
 import argparse

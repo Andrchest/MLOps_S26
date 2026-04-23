@@ -10,6 +10,7 @@ pandas
 joblib
 uvicorn
 minio
-asyncpg
 cachetools
 scikit-learn
+tenacity
+asgi-correlation-id

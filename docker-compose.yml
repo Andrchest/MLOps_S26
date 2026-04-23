@@ -1,6 +1,17 @@
 version: "3.9"
 
 services:
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml
 
   postgres:
     image: postgres:15
@@ -32,44 +43,131 @@ services:
       - "5000:5000"
 
   orchestrator:
-    build: ./services/orchestrator
+    build: 
+      context: .
+      dockerfile: services/orchestrator/Dockerfile
+    volumes:
+      - ./shared:/app/shared
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
       - "8000:8000"
     depends_on:
       - postgres
       - mlflow
+      - loki
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "project=mlops,service=orchestrator"
+        loki-retries: 2
+        loki-max-backoff: 1000ms
+        loki-timeout: 1s
 
   training-worker:
     build:
       context: .
       dockerfile: services/training_worker/Dockerfile
+    volumes:
+      - ./shared:/app/shared
     env_file: .env
+    ports:
+      - "8500:8500"
     environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
       MLFLOW_TRACKING_URI: "http://mlflow:5000"
     depends_on:
       - postgres
       - mlflow
       - minio
+      - loki
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "project=mlops,service=training-worker"
+        loki-retries: 2
+        loki-max-backoff: 1000ms
+        loki-timeout: 1s
 
   inference-service:
-    build: ./services/inference-service
+    build: 
+      context: .
+      dockerfile: ./services/inference_service/Dockerfile
+    volumes:
+      - ./shared:/app/shared
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
-      - "8001:8000"
+      - "8001:8001"
     depends_on:
       - mlflow
       - minio
-      - postgres
+      - loki
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "project=mlops,service=inference-service"
+        loki-retries: 2
+        loki-max-backoff: 1000ms
+        loki-timeout: 1s
 
   monitoring-service:
-    build: ./services/monitoring-service
+    build: 
+      context: .
+      dockerfile: ./services/monitoring_service/Dockerfile
+    volumes:
+      - ./shared:/app/shared
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
       - "8002:8002"
     depends_on:
       - postgres
+      - loki
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "project=mlops,service=monitoring-service"
+        loki-retries: 2
+        loki-max-backoff: 1000ms
+        loki-timeout: 1s
+
+  monitoring-dashboard:
+    build: 
+      context: .
+      dockerfile: ./services/monitoring_dashboard/Dockerfile
+    volumes:
+      - ./shared:/app/shared
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+      - loki
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-external-labels: "project=mlops,service=monitoring-dashboard"
+        loki-retries: 2
+        loki-max-backoff: 1000ms
+        loki-timeout: 1s
 
 volumes:
   postgres_data:
   minio_data:
+  
