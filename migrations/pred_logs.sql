@@ -26,3 +26,5 @@ ON prediction_logs(model_version);
 
 CREATE INDEX idx_prediction_logs_created_at
 ON prediction_logs(created_at);
+
+
