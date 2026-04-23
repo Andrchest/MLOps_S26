@@ -3,17 +3,26 @@ import subprocess
 import mlflow
 import os
 from mlflow.tracking import MlflowClient
-from db import (
+from services.training_worker.db import (
     get_job,
+    recover_stuck_jobs,
     update_status,
     save_trained_model,
+    JobStatus,
 )
-from minio_client import (
+from services.training_worker.minio_client import (
     download_dataset,
     save_model_to_minio,
 )
+from services.training_worker.retry import (
+    sync_retry,
+    async_retry,
+)
 
-POLL_INTERVAL = 5
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 5))
+TMP_DIR = os.getenv("TMP_DIR", "/tmp")
+TRAINING_SCRIPT = os.getenv("TRAINING_SCRIPT", "pipelines/first_ml_baseline/train.py")
+TIMEOUT = int(os.getenv("TRAINING_TIMEOUT", 300))
 
 
 async def worker_loop():
@@ -22,6 +31,10 @@ async def worker_loop():
 
     logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
     logging.info("WORKER LOOP STARTED")
+
+    # Updates status for "running" jobs
+    await recover_stuck_jobs()
+
     while True:
         try:
             job = await get_job()
@@ -36,8 +49,6 @@ async def worker_loop():
 
 
 async def process_job(job):
-    import logging
-
     job_id = job["job_id"]
     dataset_name = job["dataset_name"]
     dataset_id = job["dataset_id"]
@@ -46,26 +57,35 @@ async def process_job(job):
 
     try:
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
-        data_path = f"/tmp/{dataset_name}"
+        data_path = os.path.join(TMP_DIR, dataset_name)
         os.makedirs("/tmp", exist_ok=True)
+
         log.info(f"Downloading to {data_path}")
-        download_dataset(dataset_name, data_path)
+        sync_retry(download_dataset, dataset_name=dataset_name, file_path=data_path)
         log.info(f"Dataset downloaded to {data_path}")
+
         csv_path = f"{data_path}.csv"
+        # Adds .csv to the dataset name
         shutil.move(data_path, csv_path)
         log.info(f"Moved to {csv_path}")
-        result = subprocess.run(
-            [
-                "python",
-                "pipelines/first_ml_baseline/train.py",
-                "--data",
-                csv_path,
-                "--job_id",
-                str(job_id),
-            ],
-            capture_output=True,
-            text=True,
-        )
+        # Own try/except for subprocess
+        try:
+            result = subprocess.run(
+                [
+                    "python",
+                    TRAINING_SCRIPT,
+                    "--data",
+                    csv_path,
+                    "--job_id",
+                    str(job_id),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            raise Exception("Training timeout")
+
         log.info(
             f"Pipeline stdout: {result.stdout[:500] if result.stdout else 'empty'}"
         )
@@ -78,7 +98,7 @@ async def process_job(job):
         client = MlflowClient()
 
         # Here we find the experiment by job_id and the latest job
-        experiment_name = "first_ml_baseline"
+        experiment_name = os.getenv("MLFLOW_EXPERIMENT", "first_ml_baseline")
         exp = mlflow.get_experiment_by_name(experiment_name)
 
         runs = client.search_runs(
@@ -99,9 +119,8 @@ async def process_job(job):
         metrics = run.data.metrics
         model_name = run.data.params["model_type"]
 
-        local_model_path = mlflow.artifacts.download_artifacts(
-            artifact_uri=f"runs:/{run_id}/model"
-        )
+        # Model is already saved locally by the training pipeline
+        local_model_path = "artifacts"
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"
@@ -109,16 +128,18 @@ async def process_job(job):
 
         # Update status to mark the code part of saving model artifacts
         log.info("Updating status to persisting")
-        await update_status(job_id, "persisting")
+        await async_retry(update_status, job_id, JobStatus.PERSISTING)
         log.info("Downloading artifacts from MLflow")
 
-        model_path = save_model_to_minio(
+        model_path = sync_retry(
+            save_model_to_minio,
             local_model_path=local_model_path,
             model_name=model_name,
             model_version=model_version,
         )
 
-        await save_trained_model(
+        await async_retry(
+            save_trained_model,
             job_id=job_id,
             model_name=model_name,
             model_version=model_version,
@@ -127,14 +148,14 @@ async def process_job(job):
             parameters=params,
         )
 
-        await update_status(job_id, "succeeded")
+        await async_retry(update_status, job_id, JobStatus.SUCCEEDED)
 
     except Exception as e:
         import logging
 
         logging.error(f"Error processing job {job_id}: {e}", exc_info=True)
         try:
-            await update_status(job_id, "failed")
+            await async_retry(update_status, job_id, JobStatus.FAILED)
         except Exception as update_err:
             logging.error(f"Failed to update status: {update_err}")
         # DO NOT re-raise the exception. Let the worker continue to the next job.

@@ -1,0 +1,187 @@
+from unittest.mock import MagicMock, AsyncMock, patch
+
+# Mock external modules before importing worker
+import sys
+
+sys.modules["mlflow"] = MagicMock()
+sys.modules["mlflow.tracking"] = MagicMock()
+sys.modules["mlflow.tracking.request_header"] = MagicMock()
+sys.modules["mlflow.tracking.request_header.registry"] = MagicMock()
+sys.modules["mlflow.artifacts"] = MagicMock()
+sys.modules["mlflow.sklearn"] = MagicMock()
+sys.modules["minio"] = MagicMock()
+sys.modules["minio.error"] = MagicMock()
+sys.modules["sklearn"] = MagicMock()
+sys.modules["sklearn.pipeline"] = MagicMock()
+sys.modules["sklearn.ensemble"] = MagicMock()
+sys.modules["joblib"] = MagicMock()
+
+import pytest
+import asyncio
+import subprocess
+import shutil
+
+from services.training_worker.worker import process_job, worker_loop
+
+
+@pytest.fixture
+def mock_db():
+    mock = MagicMock()
+    mock.get_job = AsyncMock()
+    mock.update_status = AsyncMock()
+    mock.save_trained_model = AsyncMock()
+    mock.recover_stuck_jobs = AsyncMock()
+    return mock
+
+
+@pytest.fixture
+def mock_minio_client():
+    mock = MagicMock()
+    mock.download_dataset = MagicMock()
+    mock.save_model_to_minio = MagicMock(return_value="minio://models/test.joblib")
+    mock.DATASETS_BUCKET = "datasets"
+    mock.MODELS_BUCKET = "models"
+    return mock
+
+
+@pytest.mark.asyncio
+async def test_process_job_success(mock_db, mock_minio_client):
+    job = {"job_id": 123, "dataset_name": "test_dataset", "dataset_id": "d456"}
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = "Training complete"
+    mock_result.stderr = ""
+
+    mock_run = MagicMock()
+    mock_run.info.run_id = "run_789"
+    mock_run.data.params = {"model_type": "logistic_regression"}
+    mock_run.data.metrics = {"accuracy": 0.95}
+
+    mock_exp = MagicMock()
+    mock_exp.experiment_id = "exp_001"
+
+    mock_client = MagicMock()
+    mock_client.search_runs.return_value = [mock_run]
+
+    async def async_retry_mock(func, *args, **kwargs):
+        return await func(*args, **kwargs)
+
+    def sync_retry_mock(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    with patch("services.training_worker.worker.get_job", return_value=None), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.save_trained_model", mock_db.save_trained_model
+    ), patch(
+        "services.training_worker.worker.download_dataset",
+        mock_minio_client.download_dataset,
+    ), patch(
+        "services.training_worker.worker.save_model_to_minio",
+        mock_minio_client.save_model_to_minio,
+    ), patch(
+        "services.training_worker.worker.async_retry", async_retry_mock
+    ), patch(
+        "services.training_worker.worker.sync_retry", sync_retry_mock
+    ), patch(
+        "subprocess.run", return_value=mock_result
+    ), patch(
+        "services.training_worker.worker.MlflowClient", return_value=mock_client
+    ), patch(
+        "services.training_worker.worker.mlflow.get_experiment_by_name",
+        return_value=mock_exp,
+    ), patch(
+        "services.training_worker.worker.mlflow.artifacts.download_artifacts",
+        return_value="/tmp/model_dir",
+    ), patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ), patch(
+        "shutil.move"
+    ):
+
+        await process_job(job)
+
+    mock_minio_client.download_dataset.assert_called_once()
+    mock_db.update_status.assert_called()
+    calls = [str(c) for c in mock_db.update_status.call_args_list]
+    assert any("succeeded" in c for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_process_job_pipeline_failure(mock_db, mock_minio_client):
+    job = {"job_id": 123, "dataset_name": "test_dataset", "dataset_id": "d456"}
+
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "Pipeline error"
+
+    with patch("services.training_worker.worker.get_job", return_value=None), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.download_dataset",
+        mock_minio_client.download_dataset,
+    ), patch(
+        "subprocess.run", return_value=mock_result
+    ), patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ), patch(
+        "os.path.exists", return_value=True
+    ):
+
+        await process_job(job)
+
+    calls = [str(c) for c in mock_db.update_status.call_args_list]
+    assert any("failed" in c.lower() for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_worker_loop_calls_process():
+    job = {"job_id": 1, "dataset_name": "ds", "dataset_id": "id"}
+    call_count = 0
+
+    async def mock_get_job():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return job
+        return None
+
+    mock_db = MagicMock()
+    mock_db.get_job = AsyncMock(side_effect=mock_get_job)
+    mock_db.update_status = AsyncMock()
+    mock_db.save_trained_model = AsyncMock()
+    mock_db.recover_stuck_jobs = AsyncMock()
+
+    mock_minio = MagicMock()
+    mock_minio.download_dataset = MagicMock()
+    mock_minio.save_model_to_minio = MagicMock(return_value="minio://model.joblib")
+
+    with patch("services.training_worker.worker.get_job", mock_db.get_job), patch(
+        "services.training_worker.worker.update_status", mock_db.update_status
+    ), patch(
+        "services.training_worker.worker.save_trained_model", mock_db.save_trained_model
+    ), patch(
+        "services.training_worker.worker.recover_stuck_jobs", mock_db.recover_stuck_jobs
+    ), patch(
+        "services.training_worker.worker.download_dataset", mock_minio.download_dataset
+    ), patch(
+        "services.training_worker.worker.save_model_to_minio",
+        mock_minio.save_model_to_minio,
+    ), patch(
+        "services.training_worker.worker.process_job", new_callable=AsyncMock
+    ) as mock_process, patch(
+        "asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+
+        mock_sleep.side_effect = asyncio.CancelledError("Stop")
+
+        try:
+            await worker_loop()
+        except asyncio.CancelledError:
+            pass
+
+        mock_process.assert_called_once_with(job)
+        mock_sleep.assert_called()

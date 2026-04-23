@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+sqlalchemy
+psycopg2-binary
+asyncpg
+pandas
+numpy
+requests
+joblib
+minio
+cachetools
+scikit-learn
+tenacity
