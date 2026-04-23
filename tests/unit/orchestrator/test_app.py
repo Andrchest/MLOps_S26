@@ -36,7 +36,7 @@ async def test_train_success(client, mock_db_pool):
     mock_conn.fetchval.return_value = 123
     mock_db_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
-    response = await client.post("/train?dataset_name=test_dataset&dataset_id=1")
+    response = await client.post("/train?client_id=1&dataset_name=test_dataset&dataset_id=1")
 
     assert response.status_code == 201
     assert response.json() == {"job_id": 123, "status": "pending"}
@@ -53,7 +53,7 @@ async def test_train_idempotency(client, mock_db_pool):
     ]  # idempotency check returns existing, then INSERT returns same
     mock_db_pool.acquire.return_value.__aenter__.return_value = mock_conn
 
-    response = await client.post("/train?dataset_name=test_dataset&dataset_id=1")
+    response = await client.post("/train?client_id=1&dataset_name=test_dataset&dataset_id=1")
 
     assert response.status_code == 201
     assert response.json() == {"job_id": 100, "status": "pending"}
