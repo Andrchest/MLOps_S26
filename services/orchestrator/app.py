@@ -5,12 +5,9 @@ import logging
 from shared.utils.logging_utils import setup_logging
 from asgi_correlation_id import CorrelationIdMiddleware
 
-
 app = FastAPI()
 app.add_middleware(
-    CorrelationIdMiddleware,
-    header_name="X-Correlation-ID",
-    validator=None
+    CorrelationIdMiddleware, header_name="X-Correlation-ID", validator=None
 )
 
 # Initialize logger
@@ -57,7 +54,10 @@ def health():
 @app.post("/train")
 async def train(dataset_name: str, dataset_id: int):
     log_ctx = {"dataset_name": dataset_name, "dataset_id": dataset_id}
-    logger.info("Training job creation requested", extra={**log_ctx, "event": "train_request_received"})
+    logger.info(
+        "Training job creation requested",
+        extra={**log_ctx, "event": "train_request_received"},
+    )
     try:
         async with db_pool.acquire() as conn:
             job_id = await conn.fetchval(
@@ -69,18 +69,25 @@ async def train(dataset_name: str, dataset_id: int):
                 dataset_name,
                 dataset_id,
             )
-            logger.info(f"Training job created", extra={**log_ctx, "job_id": job_id, "event": "job_created_in_db"})
+            logger.info(
+                "Training job created",
+                extra={**log_ctx, "job_id": job_id, "event": "job_created_in_db"},
+            )
             return {"job_id": job_id, "status": "pending"}
     except Exception as e:
-        logger.error(f"Failed to create job: {e}", extra={**log_ctx, "event": "job_creation_failed"}, exc_info=True)
+        logger.error(
+            f"Failed to create job: {e}",
+            extra={**log_ctx, "event": "job_creation_failed"},
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Failed to create training job")
 
 
 @app.get("/jobs/{job_id}")
 async def get_status(job_id: int):
     logger.info(
-        f"Checking status for job {job_id}", 
-        extra={"job_id": job_id, "event": "status_check_requested"}
+        f"Checking status for job {job_id}",
+        extra={"job_id": job_id, "event": "status_check_requested"},
     )
     async with db_pool.acquire() as conn:
         status = await conn.fetchval(
@@ -90,10 +97,15 @@ async def get_status(job_id: int):
             job_id,
         )
         if status is None:
-            logger.warning(f"Job {job_id} not found", extra={"job_id": job_id, "event": "job_not_found"})
+            logger.warning(
+                f"Job {job_id} not found",
+                extra={"job_id": job_id, "event": "job_not_found"},
+            )
             raise HTTPException(status_code=404, detail="Job not found")
-        
-        logger.info("Dataset registration started", extra={"event": "dataset_reg_started"})
+
+        logger.info(
+            "Dataset registration started", extra={"event": "dataset_reg_started"}
+        )
         return {"job_id": job_id, "status": status}
 
 

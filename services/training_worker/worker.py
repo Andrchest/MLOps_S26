@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 import mlflow
+import shutil
 import os
 import logging
 from mlflow.tracking import MlflowClient
@@ -12,24 +13,55 @@ POLL_INTERVAL = 5
 logger = logging.getLogger(__name__)
 
 
+def cleanup_temp_files(dataset_name):
+    temp_path = f"/tmp/{dataset_name}"
+    csv_path = f"/tmp/{dataset_name}.csv"
+
+    try:
+        if os.path.exists(temp_path):
+            if os.path.isdir(temp_path):
+                shutil.rmtree(temp_path)
+            else:
+                os.remove(temp_path)
+
+        if os.path.exists(csv_path):
+            if os.path.isdir(csv_path):
+                shutil.rmtree(csv_path)
+            else:
+                os.remove(csv_path)
+
+        logger.info(
+            "Temporary files cleaned up",
+            extra={"event": "cleanup_success", "dataset": dataset_name},
+        )
+    except Exception as e:
+        logger.error(
+            f"Cleanup failed: {e}",
+            extra={"event": "cleanup_failed", "dataset": dataset_name},
+        )
+
+
 async def worker_loop():
     logger.info("WORKER LOOP STARTED")
     while True:
         try:
             job = await get_job()
-            
+
             if job:
-                logger.info(f"Job found, starting processing", extra={
-                    "event": "job_polled", 
-                    "job_id": job.get("job_id"),
-                    "dataset_id": job.get("dataset_id")
-                })
+                logger.info(
+                    "Job found, starting processing",
+                    extra={
+                        "event": "job_polled",
+                        "job_id": job.get("job_id"),
+                        "dataset_id": job.get("dataset_id"),
+                    },
+                )
                 await process_job(job)
         except Exception as e:
             logger.error(
-                f"Worker loop critical error: {e}", 
-                extra={"event": "worker_loop_error"}, 
-                exc_info=True
+                f"Worker loop critical error: {e}",
+                extra={"event": "worker_loop_error"},
+                exc_info=True,
             )
 
         await asyncio.sleep(POLL_INTERVAL)
@@ -39,37 +71,36 @@ async def process_job(job):
     job_id = job["job_id"]
     dataset_name = job["dataset_name"]
     dataset_id = job["dataset_id"]
-    import shutil
 
     job_context = {
         "job_id": job_id,
         "dataset_name": dataset_name,
         "dataset_id": dataset_id,
-        "pipeline": "first_ml_baseline"
+        "pipeline": "first_ml_baseline",
     }
 
     try:
         data_path = f"/tmp/{dataset_name}"
         os.makedirs("/tmp", exist_ok=True)
         logger.info(
-            f"Downloading dataset", 
+            "Downloading dataset",
             extra={
-                **job_context, 
-                "event": "dataset_download_start", 
-                "target_path": data_path
-            }
+                **job_context,
+                "event": "dataset_download_start",
+                "target_path": data_path,
+            },
         )
         download_dataset(dataset_name, data_path)
         csv_path = f"{data_path}.csv"
         shutil.move(data_path, csv_path)
         logger.info(
-            f"Dataset ready for training", 
-            extra={**job_context, "event": "dataset_ready", "csv_path": csv_path}
+            "Dataset ready for training",
+            extra={**job_context, "event": "dataset_ready", "csv_path": csv_path},
         )
 
         logger.info(
-            f"Starting training pipeline", 
-            extra={**job_context, "event": "training_subprocess_start"}
+            "Starting training pipeline",
+            extra={**job_context, "event": "training_subprocess_start"},
         )
         result = subprocess.run(
             [
@@ -84,23 +115,30 @@ async def process_job(job):
             text=True,
         )
         if result.stdout:
-            logger.info("Pipeline stdout snip", extra={**job_context, "stdout": result.stdout[:500]})
+            logger.info(
+                "Pipeline stdout snip",
+                extra={**job_context, "stdout": result.stdout[:500]},
+            )
 
         if result.returncode != 0:
             logger.error(
-                "Training pipeline failed", 
+                "Training pipeline failed",
                 extra={
-                    **job_context, 
-                    "event": "training_subprocess_failed", 
-                    "stderr": result.stderr[:1000]
-                }
+                    **job_context,
+                    "event": "training_subprocess_failed",
+                    "stderr": result.stderr[:1000],
+                },
             )
             raise Exception(f"Pipeline failed: {result.stderr}")
-        
+
         elif result.stderr:
             logger.warning(
-                "Pipeline completed with warnings in stderr", 
-                extra={**job_context, "event": "pipeline_warnings", "stderr": result.stderr[:500]}
+                "Pipeline completed with warnings in stderr",
+                extra={
+                    **job_context,
+                    "event": "pipeline_warnings",
+                    "stderr": result.stderr[:500],
+                },
             )
 
         client = MlflowClient()
@@ -137,8 +175,12 @@ async def process_job(job):
         # Update status to mark the code part of saving model artifacts
         await update_status(job_id, "persisting")
         logger.info(
-            "Uploading model to MinIO", 
-            extra={**job_context, "event": "minio_upload_start", "model_version": model_version}
+            "Uploading model to MinIO",
+            extra={
+                **job_context,
+                "event": "minio_upload_start",
+                "model_version": model_version,
+            },
         )
 
         model_path = save_model_to_minio(
@@ -157,23 +199,32 @@ async def process_job(job):
         )
 
         await update_status(job_id, "succeeded")
-        logger.info(f"Job completed successfully", extra={
-            **job_context, 
-            "event": "job_success", 
-            "model_version": model_version,
-            "metrics": metrics
-        })
+        logger.info(
+            "Job completed successfully",
+            extra={
+                **job_context,
+                "event": "job_success",
+                "model_version": model_version,
+                "metrics": metrics,
+            },
+        )
 
-    except Exception as e:
-        logger.error(f"Job processing failed", extra={
-            **job_context, 
-            "event": "job_failed", 
-        }, exc_info=True)
+    except Exception:
+        logger.error(
+            "Job processing failed",
+            extra={
+                **job_context,
+                "event": "job_failed",
+            },
+            exc_info=True,
+        )
         try:
             await update_status(job_id, "failed")
-        except Exception as update_err:
+        except Exception:
             logger.error(
-                f"Failed to update job status to failed", 
-                extra={**job_context, "event": "status_update_error"}
+                "Failed to update job status to failed",
+                extra={**job_context, "event": "status_update_error"},
             )
         # DO NOT re-raise the exception. Let the worker continue to the next job.
+    finally:
+        cleanup_temp_files(dataset_name)

@@ -13,9 +13,7 @@ class TestPredictor(unittest.TestCase):
     def test_predict_returns_correct_types(self):
         """Ensure the predictor parses input and returns (int, float)."""
         # Patch the joblib attribute directly on the loaded module object
-        with patch.object(
-            predictor.joblib, "load", return_value=self.mock_model
-        ):
+        with patch.object(predictor.joblib, "load", return_value=self.mock_model):
             model_predictor = predictor.Predictor(self.dummy_bytes)
             input_data = {"age": 30, "monthly_spend": 50.0, "tenure_months": 12}
 

@@ -11,7 +11,9 @@ MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "minio123")
 MODELS_BUCKET = os.getenv("MODELS_BUCKET", "models")
 DATASETS_BUCKET = os.getenv("MINIO_BUCKET", "datasets")
 
-logger.info(f"Connecting to MinIO at {MINIO_ENDPOINT}", extra={"event": "minio_client_init"})
+logger.info(
+    f"Connecting to MinIO at {MINIO_ENDPOINT}", extra={"event": "minio_client_init"}
+)
 
 minio_client = Minio(
     MINIO_ENDPOINT,
@@ -24,14 +26,14 @@ for i in range(3):
     try:
         buckets = minio_client.list_buckets()
         logger.info(
-            f"Found buckets: {[b.name for b in buckets]}", 
-            extra={"event": "minio_connection_success"}
+            f"Found buckets: {[b.name for b in buckets]}",
+            extra={"event": "minio_connection_success"},
         )
         break
     except Exception as e:
         logger.warning(
-            f"MinIO connection attempt {i + 1} failed: {e}", 
-            extra={"event": "minio_connection_retry", "attempt": i + 1}
+            f"MinIO connection attempt {i + 1} failed: {e}",
+            extra={"event": "minio_connection_retry", "attempt": i + 1},
         )
         time.sleep(2)
 
@@ -47,31 +49,32 @@ def download_dataset(dataset_name: str, file_path: str, bucket=None):
                 bucket_name=bucket, object_name=dataset_name, file_path=file_path
             )
             logger.info(
-                f"Dataset downloaded successfully", 
-                extra={"event": "dataset_download_success", **context}
+                "Dataset downloaded successfully",
+                extra={"event": "dataset_download_success", **context},
             )
             return
         except Exception as e:
             logger.warning(
-                f"Download attempt {i + 1} failed: {e}", 
-                extra={"event": "dataset_download_retry", "attempt": i + 1, **context}
+                f"Download attempt {i + 1} failed: {e}",
+                extra={"event": "dataset_download_retry", "attempt": i + 1, **context},
             )
             if i < 2:
                 time.sleep(2)
             else:
                 logger.error(
-                    "All download attempts failed", 
-                    extra={"event": "dataset_download_error", **context}
+                    "All download attempts failed",
+                    extra={"event": "dataset_download_error", **context},
                 )
                 raise
 
 
 def save_model_to_minio(local_model_path, model_name, model_version):
-    import logging
-    import os
-
     object_path = f"{model_name}/{model_version}.joblib"
-    context = {"model_name": model_name, "model_version": model_version, "object_path": object_path}
+    context = {
+        "model_name": model_name,
+        "model_version": model_version,
+        "object_path": object_path,
+    }
 
     # Try different possible file names
     possible_files = ["model.pkl", "model.joblib", "model"]
@@ -84,16 +87,22 @@ def save_model_to_minio(local_model_path, model_name, model_version):
 
     if not file_path:
         # List what's in the directory
-        files_in_dir = os.listdir(local_model_path) if os.path.exists(local_model_path) else []
+        files_in_dir = (
+            os.listdir(local_model_path) if os.path.exists(local_model_path) else []
+        )
         logger.error(
-            f"Model file not found", 
-            extra={"event": "model_file_missing", "found_files": files_in_dir, **context}
+            "Model file not found",
+            extra={
+                "event": "model_file_missing",
+                "found_files": files_in_dir,
+                **context,
+            },
         )
         raise FileNotFoundError(f"Model file not found in {local_model_path}")
 
     logger.info(
-        f"Saving model to MinIO", 
-        extra={"event": "minio_upload_start", "file_path": file_path, **context}
+        "Saving model to MinIO",
+        extra={"event": "minio_upload_start", "file_path": file_path, **context},
     )
     try:
         minio_client.fput_object(
@@ -102,13 +111,12 @@ def save_model_to_minio(local_model_path, model_name, model_version):
             file_path=file_path,
         )
         logger.info(
-            f"Model saved to MinIO", 
-            extra={"event": "minio_upload_success", **context}
+            "Model saved to MinIO", extra={"event": "minio_upload_success", **context}
         )
     except Exception as e:
         logger.error(
-            f"Failed to save model", 
-            extra={"event": "minio_upload_error", "error": str(e), **context}
+            "Failed to save model",
+            extra={"event": "minio_upload_error", "error": str(e), **context},
         )
         raise
 

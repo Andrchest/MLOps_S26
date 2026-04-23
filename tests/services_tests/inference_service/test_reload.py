@@ -6,6 +6,7 @@ from services.inference_service import app
 
 class TestReload(unittest.TestCase):
     def setUp(self):
+        app._MODEL_BYTES_CACHE.clear()
         self.mock_pool = AsyncMock()
 
         self.patcher = patch("asyncpg.create_pool", new_callable=AsyncMock)

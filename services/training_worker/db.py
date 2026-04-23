@@ -1,5 +1,6 @@
-db_pool = None
 import json
+
+db_pool = None
 
 
 async def get_job():

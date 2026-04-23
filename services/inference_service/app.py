@@ -5,7 +5,10 @@ from concurrent.futures import ProcessPoolExecutor
 from services.inference_service.schemas import InputData, Prediction, PredictResponse
 from datetime import datetime
 from services.inference_service.predictor import Predictor
-from services.inference_service.load_model import fetch_model_with_retry, _MODEL_BYTES_CACHE
+from services.inference_service.load_model import (
+    fetch_model_with_retry,
+    _MODEL_BYTES_CACHE,
+)
 import os
 import logging
 from shared.utils.logging_utils import setup_logging
@@ -36,8 +39,7 @@ async def lifespan(app: FastAPI):
     model_executor = ProcessPoolExecutor(max_workers=workers)
 
     logger.info(
-        "Application starting up", 
-        extra={"event": "startup", "max_workers": workers}
+        "Application starting up", extra={"event": "startup", "max_workers": workers}
     )
 
     yield
@@ -49,9 +51,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
-    CorrelationIdMiddleware,
-    header_name="X-Correlation-ID",
-    validator=None
+    CorrelationIdMiddleware, header_name="X-Correlation-ID", validator=None
 )
 
 
@@ -65,19 +65,13 @@ def health():
 async def reload():
     global model_executor
 
-    logger.info(
-        "Model reload initiated", 
-        extra={"event": "reload_started"}
-    )
+    logger.info("Model reload initiated", extra={"event": "reload_started"})
     async with reload_lock:
         try:
             # Clear the bytes cache in the main process
             _MODEL_BYTES_CACHE.clear()
 
-            logger.info(
-                "Model cache cleared", 
-                extra={"event": "cache_cleared"}
-            )
+            logger.info("Model cache cleared", extra={"event": "cache_cleared"})
 
             # Spin up a fresh executor
             new_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
@@ -85,6 +79,7 @@ async def reload():
             model_executor = new_executor
 
             loop = asyncio.get_running_loop()
+
             # Background task to close old pool executor
             def safe_shutdown(executor):
                 try:
@@ -98,18 +93,18 @@ async def reload():
             loop.run_in_executor(None, safe_shutdown, old_executor)
 
             logger.info(
-                "Executor reloaded successfully", 
+                "Executor reloaded successfully",
                 extra={
-                    "event": "reload_success", 
-                }
+                    "event": "reload_success",
+                },
             )
 
             return {"status": "success"}
         except Exception as e:
             logger.error(
-                f"Failed to reload executor: {e}", 
+                f"Failed to reload executor: {e}",
                 extra={"event": "reload_failed"},
-                exc_info=True
+                exc_info=True,
             )
             raise HTTPException(status_code=500, detail="Reload failed")
 
@@ -118,14 +113,14 @@ async def reload():
 async def predict(input_data: InputData, model_name: str, model_version: str):
     request_id = correlation_id.get()
     logger.info(
-        f"Starting prediction for {model_name}:{model_version}", 
+        f"Starting prediction for {model_name}:{model_version}",
         extra={
             "model_name": model_name,
             "model_version": model_version,
             "request_id": request_id,
             "input_data": input_data.model_dump(),
-            "event": "prediction_started"
-        }
+            "event": "prediction_started",
+        },
     )
 
     start_time = datetime.now()
@@ -142,8 +137,8 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
                     "model_name": model_name,
                     "model_version": model_version,
                     "event": "model_fetch_failed",
-                    "error_type": "not_found"
-                }
+                    "error_type": "not_found",
+                },
             )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
         except Exception as e:
@@ -154,9 +149,9 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
                     "request_id": request_id,
                     "model_name": model_name,
                     "event": "infrastructure_error",
-                    "error_detail": str(e)
+                    "error_detail": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -165,8 +160,8 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
 
         loop = asyncio.get_running_loop()
         logger.debug(
-            "Transfer prediction to ProcessPool", 
-            extra={"request_id": request_id, "model_name": model_name}
+            "Transfer prediction to ProcessPool",
+            extra={"request_id": request_id, "model_name": model_name},
         )
         label, score = await loop.run_in_executor(
             model_executor, _run_prediction, model_bytes, input_data.model_dump()
@@ -178,15 +173,15 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
         raise
     except Exception as e:
         logger.critical(
-            f"Prediction logic crashed: {type(e).__name__}: {e}", 
+            f"Prediction logic crashed: {type(e).__name__}: {e}",
             extra={
                 "request_id": request_id,
                 "model_name": model_name,
                 "model_version": model_version,
                 "event": "prediction_runtime_error",
-                "input_data": input_data.model_dump()
+                "input_data": input_data.model_dump(),
             },
-            exc_info=True 
+            exc_info=True,
         )
         # Prediction logic crashed (Code Error)
         raise HTTPException(status_code=500, detail="Unexpected system error")
@@ -206,8 +201,8 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
     )
 
     logger.info(
-        "Prediction successful", 
-        extra={"event": "prediction_completed", **response.model_dump(mode="json")}
+        "Prediction successful",
+        extra={"event": "prediction_completed", **response.model_dump(mode="json")},
     )
 
     return response

@@ -7,9 +7,7 @@ from services.training_worker.worker import worker_loop
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from shared.utils.logging_utils import setup_logging
-import logging
 from asgi_correlation_id import CorrelationIdMiddleware
-
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
-    CorrelationIdMiddleware,
-    header_name="X-Correlation-ID",
-    validator=None
+    CorrelationIdMiddleware, header_name="X-Correlation-ID", validator=None
 )
 
 

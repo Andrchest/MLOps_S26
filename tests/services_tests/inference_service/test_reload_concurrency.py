@@ -28,12 +28,11 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.test_ctx.__exit__(None, None, None)
 
-    @patch('services.inference_service.minio_client.minio_client')
+    @patch("services.inference_service.minio_client.minio_client")
     async def test_reload_during_active_request(self, mock_minio):
         mock_response = MagicMock()
         mock_response.read.return_value = b"fake_model_content"
         mock_minio.get_object.return_value = mock_response
-
 
         # Check if model_executor exists, if not, wait a tiny bit for startup
         if not hasattr(app, "model_executor"):
@@ -48,7 +47,10 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
             time.sleep(5.0)
             return 1, 0.99
 
-        with patch("services.inference_service.app._run_prediction", side_effect=slow_prediction_mock):
+        with patch(
+            "services.inference_service.app._run_prediction",
+            side_effect=slow_prediction_mock,
+        ):
             loop = asyncio.get_running_loop()
             # Run the prediction in a background thread via the client
             predict_task = loop.run_in_executor(
