@@ -2,8 +2,8 @@ from fastapi import FastAPI, HTTPException
 import asyncpg
 import os
 import logging
-from shared.utils.logging_utils import JSONFormatter
-from asgi_correlation_id import CorrelationIdMiddleware, CorrelationIdFilter
+from shared.utils.logging_utils import setup_logging
+from asgi_correlation_id import CorrelationIdMiddleware
 
 
 app = FastAPI()
@@ -15,16 +15,6 @@ app.add_middleware(
 
 # Initialize logger
 logger = logging.getLogger(__name__)
-
-
-def setup_logging():
-    handler = logging.StreamHandler()
-    formatter = JSONFormatter(os.getenv("SERVICE_NAME", "orchestrator"))
-    handler.setFormatter(formatter)
-    # Add the filter to inject correlation_id into log records
-    handler.addFilter(CorrelationIdFilter())
-    logger.addHandler(handler)
-    logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 
 db_pool = None
@@ -45,7 +35,7 @@ async def init_db():
 
 @app.on_event("startup")
 async def startup():
-    setup_logging()
+    setup_logging("orchestrator")
     logger.info("Orchestrator starting up...", extra={"event": "startup_initiated"})
     await init_db()
     logger.info("Orchestrator startup complete.", extra={"event": "startup_finished"})

@@ -4,17 +4,8 @@ import mlflow
 import os
 import logging
 from mlflow.tracking import MlflowClient
-
-
-from .db import (
-    get_job,
-    update_status,
-    save_trained_model,
-)
-from .minio_client import (
-    download_dataset,
-    save_model_to_minio,
-)
+from services.training_worker.db import get_job, update_status, save_trained_model
+from services.training_worker.minio_client import download_dataset, save_model_to_minio
 
 POLL_INTERVAL = 5
 

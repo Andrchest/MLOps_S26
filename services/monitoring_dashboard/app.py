@@ -1,31 +1,25 @@
 import streamlit as st
 import logging
-from shared.utils.logging_utils import JSONFormatter
-import os
-
-from db import check_db_health
-from repository import (
-    get_job_status_counts,
-    get_jobs,
-    get_models,
-    get_recent_prediction_logs,
-    get_total_jobs,
-    get_total_models,
-)
-from ui import render_result
+from shared.utils.logging_utils import setup_logging
+from asgi_correlation_id import correlation_id
+import uuid
+from services.monitoring_dashboard.db import check_db_health
+from services.monitoring_dashboard.repository import *
+from services.monitoring_dashboard.ui import render_result
 
 
 logger = logging.getLogger(__name__)
 
-def setup_logging():
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = JSONFormatter(os.getenv("SERVICE_NAME", "monitoring-dashboard"))
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+# Set id into streamlt session
+def inject_correlation_id():
+    if "correlation_id" not in st.session_state:
+        st.session_state.correlation_id = str(uuid.uuid4())
+    correlation_id.set(st.session_state.correlation_id)
+    logger.info(f"ID injected successfully", extra={"event": "session_start"})
 
-setup_logging()
+setup_logging("monitoring-dashboard")
+inject_correlation_id()
+
 logger.info("Monitoring Dashboard started", extra={"event": "dashboard_started"})
 
 st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")

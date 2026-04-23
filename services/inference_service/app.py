@@ -2,14 +2,14 @@ from fastapi import FastAPI, HTTPException, status
 import asyncio
 from contextlib import asynccontextmanager
 from concurrent.futures import ProcessPoolExecutor
-from .schemas import InputData, Prediction, PredictResponse
+from services.inference_service.schemas import InputData, Prediction, PredictResponse
 from datetime import datetime
-from .predictor import Predictor
-from .load_model import fetch_model_with_retry, _MODEL_BYTES_CACHE
+from services.inference_service.predictor import Predictor
+from services.inference_service.load_model import fetch_model_with_retry, _MODEL_BYTES_CACHE
 import os
 import logging
-from shared.utils.logging_utils import JSONFormatter
-from asgi_correlation_id import CorrelationIdMiddleware, CorrelationIdFilter, correlation_id
+from shared.utils.logging_utils import setup_logging
+from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
 reload_lock = asyncio.Lock()
 
@@ -17,15 +17,6 @@ reload_lock = asyncio.Lock()
 logger = logging.getLogger(__name__)
 
 
-def setup_logging():
-    handler = logging.StreamHandler()
-    formatter = JSONFormatter(os.getenv("SERVICE_NAME", "inference-service"))
-    handler.setFormatter(formatter)
-    # Add the filter to inject correlation_id into log records
-    handler.addFilter(CorrelationIdFilter())
-    logger.addHandler(handler)
-    logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
- 
 def _run_prediction(model_bytes: bytes, input_dict: dict):
     """
     Helper function that runs inside the ProcessPool worker.
@@ -38,7 +29,7 @@ def _run_prediction(model_bytes: bytes, input_dict: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model_executor
-    setup_logging()
+    setup_logging("inference-service")
 
     # Initialize Process Pool for CPU-bound scikit-learn work
     workers = 4

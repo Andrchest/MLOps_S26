@@ -2,31 +2,22 @@ import asyncpg
 import asyncio
 import logging
 import os
-from . import db
-from .worker import worker_loop
+from services.training_worker import db
+from services.training_worker.worker import worker_loop
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from shared.utils.logging_utils import JSONFormatter
+from shared.utils.logging_utils import setup_logging
 import logging
-from asgi_correlation_id import CorrelationIdMiddleware, CorrelationIdFilter
+from asgi_correlation_id import CorrelationIdMiddleware
 
 
 logger = logging.getLogger(__name__)
-
-def setup_logging():
-    handler = logging.StreamHandler()
-    formatter = JSONFormatter(os.getenv("SERVICE_NAME", "training-worker"))
-    handler.setFormatter(formatter)
-    # Add the filter to inject correlation_id into log records
-    handler.addFilter(CorrelationIdFilter())
-    logger.addHandler(handler)
-    logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
 
 # Connection to Postgres
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_logging()
+    setup_logging("training-worker")
     logger.info("Creating DB pool", extra={"event": "db_pool_creating"})
     db.db_pool = await asyncpg.create_pool(
         user=os.getenv("POSTGRES_USER", "mlops"),

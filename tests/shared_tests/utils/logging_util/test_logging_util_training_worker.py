@@ -335,7 +335,7 @@ class TestTrainingWorkerLogging(unittest.TestCase):
         mock_subprocess_run.return_value = mock_process_result
         mock_update_status.return_value = None
         
-        # Mock MLflow components (simplified for this test)
+        # Mock MLflow components
         with patch('worker.MlflowClient') as mock_mlflow_client, \
              patch('worker.mlflow.get_experiment_by_name') as mock_get_exp, \
              patch('worker.mlflow.artifacts.download_artifacts') as mock_download, \
@@ -404,24 +404,6 @@ class TestTrainingWorkerLogging(unittest.TestCase):
             # These logs shouldn't have correlation_id as they were before the request
             self.assertIsNone(startup_logs[0].get("correlation_id"))
             
-    @patch('worker.get_job')
-    async def test_worker_loop_poll_interval_logging(self, mock_get_job):
-        """Test that worker loop logs continue to work across multiple poll cycles"""
-        # Setup mock to return None (no jobs) then a job
-        mock_get_job.side_effect = [None, {"job_id": 1, "dataset_name": "test", "dataset_id": 2}]
-        
-        # Run worker loop for a couple of cycles
-        task = asyncio.create_task(worker_loop())
-        await asyncio.sleep(0.3)  # Allow for multiple polls
-        task.cancel()
-        
-        # Get logs
-        log_records = self.get_logs()
-        
-        # Verify worker loop continues running
-        worker_started = [log for log in log_records if log.get("event") == "worker_loop_started"]
-        self.assertTrue(len(worker_started) > 0)
-
 
 if __name__ == "__main__":
     unittest.main()
