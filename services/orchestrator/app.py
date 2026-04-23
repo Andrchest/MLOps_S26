@@ -221,3 +221,51 @@ async def deployment_rollback(deployment_id: int):
             "model_name": model_name,
             "model_version": previous,
         }
+
+
+@app.get("/jobs")
+async def get_all_jobs():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        jobs = await conn.fetch("""
+        SELECT * FROM jobs ORDER BY job_id DESC
+        """)
+
+    return [dict(job) for job in jobs]
+
+
+@app.get("/datasets")
+async def get_all_datasets():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        datasets = await conn.fetch("""
+            SELECT * FROM datasets ORDER BY dataset_id DESC
+            """)
+
+    return [dict(dataset) for dataset in datasets]
+
+
+@app.get("/models")
+async def get_all_models():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        models = await conn.fetch("""
+            SELECT * FROM trained_models ORDER BY created_at DESC
+            """)
+
+    return [dict(model) for model in models]
+
+
+@app.get("/deployments")
+async def get_all_deployments():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database is not available.")
+    async with db_pool.acquire() as conn:
+        deployments = await conn.fetch("""
+            SELECT * FROM deployments ORDER BY deployment_id DESC
+            """)
+
+    return [dict(deployment) for deployment in deployments]

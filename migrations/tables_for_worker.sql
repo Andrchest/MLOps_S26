@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 
 
-CREATE TABLE  IF NOT EXISTS trained_models (
+CREATE TABLE IF NOT EXISTS trained_models (
     job_id INT NOT NULL REFERENCES jobs(job_id),
     model_name TEXT NOT NULL,
     model_version TEXT NOT NULL,
