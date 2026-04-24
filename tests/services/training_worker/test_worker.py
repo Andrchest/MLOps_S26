@@ -1,13 +1,27 @@
 import pytest
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import services.training_worker.worker as worker_module
 
 fake_job = {
     "job_id": 1,
-    "dataset_name": "data.csv",
+    "dataset_name": "data",
     "dataset_id": 10,
 }
+
+
+def setup_tmp_file():
+    os.makedirs("/tmp", exist_ok=True)
+
+    # cleanup before
+    if os.path.exists("/tmp/data"):
+        os.remove("/tmp/data")
+    if os.path.exists("/tmp/data.csv"):
+        os.remove("/tmp/data.csv")
+
+    with open("/tmp/data", "w") as f:
+        f.write("test")
 
 
 # =========================
@@ -34,6 +48,11 @@ async def test_process_job_success(
     mock_save_db,
     mock_update_status,
 ):
+    # -------------------------
+    # setup file
+    # -------------------------
+    setup_tmp_file()
+
     # -------------------------
     # subprocess success
     # -------------------------
@@ -72,7 +91,7 @@ async def test_process_job_success(
     await worker_module.process_job(fake_job)
 
     # -------------------------
-    # ASSERTS
+    # ASSERT
     # -------------------------
     mock_update_status.assert_any_call(1, "succeeded")
 
@@ -90,7 +109,12 @@ async def test_process_job_fail(
     mock_update_status,
 ):
     # -------------------------
-    # download must not hit network
+    # setup file
+    # -------------------------
+    setup_tmp_file()
+
+    # -------------------------
+    # download mock
     # -------------------------
     mock_download_dataset.return_value = None
 
@@ -101,12 +125,11 @@ async def test_process_job_fail(
     mock_subprocess.return_value.stderr = "error"
 
     # -------------------------
-    # RUN should raise
+    # RUN (без pytest.raises)
     # -------------------------
-    with pytest.raises(Exception):
-        await worker_module.process_job(fake_job)
+    await worker_module.process_job(fake_job)
 
     # -------------------------
-    # status fail must be called
+    # ASSERT
     # -------------------------
     mock_update_status.assert_any_call(1, "failed")

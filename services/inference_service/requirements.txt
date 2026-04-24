@@ -3,13 +3,12 @@ uvicorn
 pydantic
 sqlalchemy
 psycopg2-binary
+asyncpg
 pandas
 numpy
 requests
-pandas
 joblib
-uvicorn
 minio
-asyncpg
 cachetools
 scikit-learn
+tenacity

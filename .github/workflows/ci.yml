@@ -22,7 +22,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 black pytest
+          pip install flake8 black pytest pytest-asyncio httpx
+          pip install fastapi uvicorn pydantic asyncpg minio sqlalchemy psycopg2-binary mlflow boto3 python-multipart tenacity cachetools
 
       - name: Check code formatting with Black
         run: black --check .
@@ -30,8 +31,8 @@ jobs:
       - name: Lint code with Flake8
         run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      # - name: Run PyTest
-      #   run: pytest tests/
+      - name: Run PyTest
+        run: pytest tests/ --ignore=tests/integration/ -v --tb=short
 
   docker-build-check:
     name: Test Docker Builds
@@ -39,19 +40,20 @@ jobs:
     needs: lint-and-test
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     strategy:
-      matrix:
-        service:
-          - inference-service
-          - monitoring-service
-          - orchestrator
-          - training_worker
+        matrix:
+          service:
+            - inference_service
+            - monitoring-service
+            - monitoring-dashboard
+            - orchestrator
+            - training_worker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Build inference-service
-        if: matrix.service == 'inference-service'
-        run: docker build -t mlops/inference-service:test -f services/inference-service/Dockerfile .
+      - name: Build inference_service
+        if: matrix.service == 'inference_service'
+        run: docker build -t mlops/inference_service:test -f services/inference_service/Dockerfile .
 
       - name: Build monitoring-service
         if: matrix.service == 'monitoring-service'
@@ -64,3 +66,7 @@ jobs:
       - name: Build training_worker
         if: matrix.service == 'training_worker'
         run: docker build -t mlops/training_worker:test -f services/training_worker/Dockerfile .
+
+      - name: Build monitoring-dashboard
+        if: matrix.service == 'monitoring-dashboard'
+        run: docker build -t mlops/monitoring-dashboard:test -f services/monitoring-dashboard/Dockerfile .
