@@ -1,7 +1,13 @@
 # MLOps Platform (S26)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MLOps](https://img.shields.io/badge/MLOps-Automated-green)](#)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](#)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-blue)](#)
 
-A comprehensive microservice-based platform for training, deploying, and monitoring Machine Learning models. 
-*Cool description: TBD*.
+**MLOps Platform** is a microservice-based platform automates the entire **ML lifecycle** within a single ecosystem. It integrates data management, training orchestration, and REST API serving into a unified MLOps workflow with built-in performance monitoring.
+
+![System Architecture](./assets/architecture_diagram.png)
 
 ## Quick Start & Reproducibility
 
