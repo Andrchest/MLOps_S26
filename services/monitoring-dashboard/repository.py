@@ -114,9 +114,9 @@ def get_deployments():
 # System Health
 # ----------------------
 SERVICES = {
-    "orchestrator": "http://localhost:8000/health",
-    "inference": "http://localhost:8001/health",
-    "monitoring": "http://localhost:8002/health",
+    "orchestrator": "http://orchestrator:8000/health",
+    "inference": "http://inference-service:8000/health",
+    "monitoring": "http://monitoring-service:8002/health",
 }
 
 
