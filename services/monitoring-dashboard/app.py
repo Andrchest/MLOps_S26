@@ -11,13 +11,17 @@ from dashboard_pages.monitoring import render_monitoring_page
 from dashboard_pages.overview import render_overview_page
 from dashboard_pages.system_health import render_system_health_page
 from db import check_db_health
+from ui import apply_global_styles, render_sidebar
 
-st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
+st.set_page_config(
+    page_title="Monitoring Dashboard",
+    page_icon="assets/innopolis-logo.png",
+    layout="wide",
+)
 
-# ----------------------
-# Mock Authentication
-# ----------------------
+apply_global_styles()
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -29,7 +33,7 @@ def login():
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
-    if st.button("Login"):
+    if st.button("Login", use_container_width=True):
         if username == "admin" and password == "admin123":
             st.session_state.authenticated = True
             st.session_state.username = username
@@ -43,52 +47,36 @@ if not st.session_state.authenticated:
     st.stop()
 
 
-# ----------------------
-# Dashboard Shell
-# ----------------------
-st.title("Monitoring Dashboard")
-st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
-st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-st.sidebar.title("Navigation")
-
-section = st.sidebar.radio(
-    "Sections",
-    ["Overview", "Operations", "Monitoring", "System"],
-)
-
-if section == "Overview":
-    page = "System Overview"
-
-elif section == "Operations":
-    page = st.sidebar.radio(
-        "Operations",
-        ["Jobs", "Datasets", "Models", "Deployments"],
-    )
-
-elif section == "Monitoring":
-    page = st.sidebar.radio(
-        "Monitoring",
-        ["Inference", "Monitoring"],
-    )
-
-else:
-    page = "System Health"
-
-st.sidebar.markdown("---")
-st.sidebar.markdown(f"**User:** {st.session_state.get('username', 'admin')}")
-
-if st.sidebar.button("Refresh"):
-    st.rerun()
-
-if st.sidebar.button("Logout"):
-    st.session_state.authenticated = False
-    st.rerun()
+page = render_sidebar()
 
 
 # ----------------------
-# DB Health Check
+# Top Bar
 # ----------------------
+left, right = st.columns([0.86, 0.14])
+
+with left:
+    st.title("Monitoring Dashboard")
+    st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+with right:
+    action_cols = st.columns([1, 1])
+
+    with action_cols[0]:
+        if st.button("↻", key="page_refresh", help="Refresh"):
+            st.rerun()
+
+    with action_cols[1]:
+        with st.popover("⋮"):
+            st.markdown("**Account**")
+            st.caption(st.session_state.get("username", "admin"))
+
+            if st.button("Logout", use_container_width=True):
+                st.session_state.authenticated = False
+                st.rerun()
+
+
 db_ok, db_error = check_db_health()
 
 if not db_ok:
@@ -97,9 +85,6 @@ if not db_ok:
     st.stop()
 
 
-# ----------------------
-# Router
-# ----------------------
 if page == "System Overview":
     render_overview_page()
 
