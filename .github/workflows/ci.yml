@@ -40,13 +40,12 @@ jobs:
     needs: lint-and-test
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     strategy:
-        matrix:
-          service:
-            - inference_service
-            - monitoring-service
-            - monitoring-dashboard
-            - orchestrator
-            - training_worker
+      matrix:
+        service:
+          - inference_service
+          - monitoring_service
+          - orchestrator
+          - training_worker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -55,9 +54,9 @@ jobs:
         if: matrix.service == 'inference_service'
         run: docker build -t mlops/inference_service:test -f services/inference_service/Dockerfile .
 
-      - name: Build monitoring-service
-        if: matrix.service == 'monitoring-service'
-        run: docker build -t mlops/monitoring-service:test -f services/monitoring-service/Dockerfile .
+      - name: Build monitoring_service
+        if: matrix.service == 'monitoring_service'
+        run: docker build -t mlops/monitoring_service:test -f services/monitoring_service/Dockerfile .
 
       - name: Build orchestrator
         if: matrix.service == 'orchestrator'

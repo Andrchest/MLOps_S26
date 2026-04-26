@@ -1,18 +1,23 @@
 from fastapi import FastAPI, HTTPException, status
-import uuid
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from concurrent.futures import ProcessPoolExecutor
-from schemas import InputData, Prediction, PredictResponse
+from services.inference_service.schemas import InputData, Prediction, PredictResponse
 from datetime import datetime
-from predictor import Predictor
-from load_model import fetch_model_with_retry, _MODEL_BYTES_CACHE
+from services.inference_service.predictor import Predictor
+from services.inference_service.load_model import (
+    fetch_model_with_retry,
+    _MODEL_BYTES_CACHE,
+)
 import os
-import asyncpg
+import logging
+from shared.utils.logging_utils import setup_logging
+from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
 reload_lock = asyncio.Lock()
-db_pool = None
+
+
+logger = logging.getLogger(__name__)
 
 
 def _run_prediction(model_bytes: bytes, input_dict: dict):
@@ -26,60 +31,98 @@ def _run_prediction(model_bytes: bytes, input_dict: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model_executor, db_pool
+    global model_executor
+    setup_logging("inference-service")
 
     # Initialize Process Pool for CPU-bound scikit-learn work
-    model_executor = ProcessPoolExecutor(max_workers=4)
+    workers = 4
+    model_executor = ProcessPoolExecutor(max_workers=workers)
 
-    # Initialize database pool for prediction logging (optional)
-    global db_pool
-    try:
-        db_pool = await asyncpg.create_pool(
-            user=os.getenv("POSTGRES_USER", "mlops"),
-            password=os.getenv("POSTGRES_PASSWORD", "mlops"),
-            database=os.getenv("POSTGRES_DB", "mlops"),
-            host=os.getenv("POSTGRES_HOST", "postgres"),
-            port=int(os.getenv("POSTGRES_PORT", "5432")),
-        )
-    except Exception:
-        db_pool = None  # Prediction logging disabled if DB unavailable
+    logger.info(
+        "Application starting up", extra={"event": "startup", "max_workers": workers}
+    )
 
     yield
 
+    logger.info("Application shutting down", extra={"event": "shutdown"})
     model_executor.shutdown(wait=True)
-    if db_pool:
-        await db_pool.close()
+    logger.info("Executor shut down complete")
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CorrelationIdMiddleware, header_name="X-Correlation-ID", validator=None
+)
 
 
 @app.get("/health")
 def health():
+    logger.debug("Health check requested", extra={"event": "health_check"})
     return {"status": "ok"}
 
 
 @app.post("/reload")
 async def reload():
     global model_executor
+
+    logger.info("Model reload initiated", extra={"event": "reload_started"})
     async with reload_lock:
-        # Clear the bytes cache in the main process
-        _MODEL_BYTES_CACHE.clear()
+        try:
+            # Clear the bytes cache in the main process
+            _MODEL_BYTES_CACHE.clear()
 
-        # Spin up a fresh executor
-        new_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
-        old_executor = model_executor
-        model_executor = new_executor
+            logger.info("Model cache cleared", extra={"event": "cache_cleared"})
 
-        loop = asyncio.get_running_loop()
-        # Background task to close old pool executor
-        loop.run_in_executor(None, old_executor.shutdown, True)
+            # Spin up a fresh executor
+            new_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
+            old_executor = model_executor
+            model_executor = new_executor
 
-        return {"status": "success"}
+            loop = asyncio.get_running_loop()
+
+            # Background task to close old pool executor
+            def safe_shutdown(executor):
+                try:
+                    executor.shutdown(wait=True)
+                    logger.info("Old executor finished tasks and shut down.")
+                except Exception as e:
+                    logger.error(f"Error during old executor shutdown: {e}")
+
+            loop = asyncio.get_running_loop()
+            # Запускаем фоновую задачу "выключения"
+            loop.run_in_executor(None, safe_shutdown, old_executor)
+
+            logger.info(
+                "Executor reloaded successfully",
+                extra={
+                    "event": "reload_success",
+                },
+            )
+
+            return {"status": "success"}
+        except Exception as e:
+            logger.error(
+                f"Failed to reload executor: {e}",
+                extra={"event": "reload_failed"},
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail="Reload failed")
 
 
 @app.post("/predict", response_model=PredictResponse)
 async def predict(input_data: InputData, model_name: str, model_version: str):
+    request_id = correlation_id.get()
+    logger.info(
+        f"Starting prediction for {model_name}:{model_version}",
+        extra={
+            "model_name": model_name,
+            "model_version": model_version,
+            "request_id": request_id,
+            "input_data": input_data.model_dump(),
+            "event": "prediction_started",
+        },
+    )
+
     start_time = datetime.now()
 
     try:
@@ -87,15 +130,39 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
             model_bytes = await fetch_model_with_retry(model_name, model_version)
         except ValueError as ve:
             # Model not found
+            logger.warning(
+                f"Model not found: {model_name}:{model_version}",
+                extra={
+                    "request_id": request_id,
+                    "model_name": model_name,
+                    "model_version": model_version,
+                    "event": "model_fetch_failed",
+                    "error_type": "not_found",
+                },
+            )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
         except Exception as e:
             # Connection failure or MinIO timeout (Infrastructure Error)
+            logger.error(
+                f"Infrastructure error (MinIO) while fetching {model_name}",
+                extra={
+                    "request_id": request_id,
+                    "model_name": model_name,
+                    "event": "infrastructure_error",
+                    "error_detail": str(e),
+                },
+                exc_info=True,
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Model {model_name}:{model_version} is unavailable. {e}",
             )
 
         loop = asyncio.get_running_loop()
+        logger.debug(
+            "Transfer prediction to ProcessPool",
+            extra={"request_id": request_id, "model_name": model_name},
+        )
         label, score = await loop.run_in_executor(
             model_executor, _run_prediction, model_bytes, input_data.model_dump()
         )
@@ -105,19 +172,26 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(e)
+        logger.critical(
+            f"Prediction logic crashed: {type(e).__name__}: {e}",
+            extra={
+                "request_id": request_id,
+                "model_name": model_name,
+                "model_version": model_version,
+                "event": "prediction_runtime_error",
+                "input_data": input_data.model_dump(),
+            },
+            exc_info=True,
+        )
         # Prediction logic crashed (Code Error)
         raise HTTPException(status_code=500, detail="Unexpected system error")
 
     # latency
     latency = int((datetime.now() - start_time).total_seconds() * 1000)
 
-    request_id = str(uuid.uuid4())
-    timestamp = datetime.now()
-
     response = PredictResponse(
         request_id=request_id,
-        timestamp=timestamp,
+        timestamp=datetime.now(),
         model_version=model_version,
         model_name=model_name,
         input_data=input_data,
@@ -126,26 +200,9 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
         status=status_msg,
     )
 
-    # Log prediction to database
-    if db_pool:
-        try:
-            async with db_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO prediction_logs
-                    (request_id, timestamp, model_name, model_version, input_data, prediction, latency_ms, status)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    """,
-                    request_id,
-                    timestamp,
-                    model_name,
-                    model_version,
-                    json.dumps(input_data.model_dump()),
-                    json.dumps({"label": prediction.label, "score": prediction.score}),
-                    latency,
-                    status_msg,
-                )
-        except Exception:
-            pass  # Don't fail the request if logging fails
+    logger.info(
+        "Prediction successful",
+        extra={"event": "prediction_completed", **response.model_dump(mode="json")},
+    )
 
     return response

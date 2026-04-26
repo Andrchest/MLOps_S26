@@ -1,18 +1,6 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import sys
-from pathlib import Path
-
-current_file = Path(__file__).resolve()
-project_root = current_file.parents[2]
-inference_dir = project_root / "services" / "inference_service"
-
-# Ensure inference_service is first in sys.path
-if str(inference_dir) not in sys.path:
-    sys.path.insert(0, str(inference_dir))
-
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+from unittest.mock import patch
+from services.inference_service.load_model import fetch_model_with_retry
 
 
 class TestFetchRetry(unittest.IsolatedAsyncioTestCase):

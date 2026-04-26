@@ -1,8 +1,18 @@
-import logging
-import os
-
+from fastapi import FastAPI, HTTPException
 import asyncpg
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import os
+import logging
+from shared.utils.logging_utils import setup_logging
+from asgi_correlation_id import CorrelationIdMiddleware
+
+app = FastAPI()
+app.add_middleware(
+    CorrelationIdMiddleware, header_name="X-Correlation-ID", validator=None
+)
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
 
 from dataset_service import (
     DatasetRecord,
@@ -19,6 +29,7 @@ db_pool = None
 
 async def init_db() -> None:
     global db_pool
+    logger.info("Creating DB pool", extra={"event": "db_pool_creating"})
     db_pool = await asyncpg.create_pool(
         user=os.getenv("POSTGRES_USER", "mlops"),
         password=os.getenv("POSTGRES_PASSWORD", "mlops"),
@@ -26,63 +37,68 @@ async def init_db() -> None:
         host=os.getenv("POSTGRES_HOST", "postgres"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
     )
+    logger.info("DB pool created successfully", extra={"event": "db_pool_ready"})
 
 
 @app.on_event("startup")
-async def startup() -> None:
-    try:
-        await init_db()
-    except Exception as exc:
-        logging.warning("Failed to initialize database pool: %s", exc)
+async def startup():
+    setup_logging("orchestrator")
+    logger.info("Orchestrator starting up...", extra={"event": "startup_initiated"})
+    await init_db()
+    logger.info("Orchestrator startup complete.", extra={"event": "startup_finished"})
 
 
 @app.on_event("shutdown")
-async def shutdown() -> None:
-    if db_pool is not None:
-        await db_pool.close()
+async def shutdown():
+    logger.info("Orchestrator shutting down...", extra={"event": "shutdown_initiated"})
+    await db_pool.close()
+    logger.info("Orchestrator shutdown complete.", extra={"event": "shutdown_finished"})
 
 
 @app.get("/health")
 def health():
+    logger.debug("Health check requested", extra={"event": "health_check"})
     return {"status": "ok"}
 
 
 @app.post("/train", status_code=201)
 async def train(dataset_name: str, dataset_id: int):
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-
-    async with db_pool.acquire() as conn:
-        # Idempotency: check if exact same request was already processed
-        existing = await conn.fetchval(
-            """
-            SELECT job_id FROM jobs
-            WHERE dataset_name = $1 AND dataset_id = $2 AND status = 'pending'
-            LIMIT 1
-            """,
-            dataset_name,
-            dataset_id,
+    log_ctx = {"dataset_name": dataset_name, "dataset_id": dataset_id}
+    logger.info(
+        "Training job creation requested",
+        extra={**log_ctx, "event": "train_request_received"},
+    )
+    try:
+        async with db_pool.acquire() as conn:
+            job_id = await conn.fetchval(
+                """
+                INSERT INTO jobs (dataset_name, dataset_id, status)
+                VALUES ($1, $2, 'pending')
+                RETURNING job_id
+                """,
+                dataset_name,
+                dataset_id,
+            )
+            logger.info(
+                "Training job created",
+                extra={**log_ctx, "job_id": job_id, "event": "job_created_in_db"},
+            )
+            return {"job_id": job_id, "status": "pending"}
+    except Exception as e:
+        logger.error(
+            f"Failed to create job: {e}",
+            extra={**log_ctx, "event": "job_creation_failed"},
+            exc_info=True,
         )
-        if existing:
-            return {"job_id": existing, "status": "pending"}
-
-        job_id = await conn.fetchval(
-            """
-            INSERT INTO jobs (dataset_id, status)
-            VALUES ($1, 'pending')
-            RETURNING job_id
-            """,
-            dataset_id,
-        )
-
-    return {"job_id": job_id, "status": "pending"}
+        raise HTTPException(status_code=500, detail="Failed to create training job")
 
 
 @app.get("/jobs/{job_id}")
 async def get_status(job_id: int):
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-
+    logger.info(
+        f"Checking status for job {job_id}",
+        extra={"job_id": job_id, "event": "status_check_requested"},
+    )
     async with db_pool.acquire() as conn:
         status = await conn.fetchval(
             """
@@ -92,180 +108,20 @@ async def get_status(job_id: int):
             """,
             job_id,
         )
-
-    return {"job_id": job_id, "status": status}
-
-
-@app.post("/datasets", response_model=DatasetRecord)
-async def upload_and_register_dataset(
-    file: UploadFile = File(...),
-    name: str | None = Form(default=None),
-):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Dataset file name is required.")
-
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV datasets are supported.")
-
-    payload = await file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="Uploaded dataset is empty.")
-
-    try:
-        return register_uploaded_dataset(
-            filename=file.filename,
-            payload=payload,
-            content_type=file.content_type or "text/csv",
-            name=name,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to upload dataset to object storage: {exc}",
-        ) from exc
-
-
-@app.get("/datasets/{dataset_id}", response_model=DatasetRecord)
-def get_dataset(dataset_id: int):
-    dataset = dataset_registry.get(dataset_id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="Dataset not found.")
-    return dataset
-
-
-@app.get("/models/{model_name}/deployments")
-async def get_deployment_name(model_name: str):
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-
-    async with db_pool.acquire() as conn:
-        models = await conn.fetch(
-            """
-            SELECT * FROM deployments
-            WHERE model_name = $1
-            ORDER BY deployment_id DESC
-            """,
-            model_name,
-        )
-    if not models:
-        raise HTTPException(status_code=404, detail="Model not found.")
-    return [dict(m) for m in models]
-
-
-@app.get("/deployments/{deployment_id}")
-async def get_deployment_id(deployment_id: int):
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        deployment = await conn.fetchrow(
-            """
-            SELECT * 
-            from deployments
-            WHERE deployment_id = $1
-            """,
-            deployment_id,
-        )
-    if not deployment:
-        raise HTTPException(status_code=404, detail="Deployment is not available.")
-    return dict(deployment)
-
-
-@app.post("/deployments/{deployment_id}/rollback")
-async def deployment_rollback(deployment_id: int):
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        current_vers = await conn.fetchrow(
-            """
-            SELECT model_name, model_version
-            from deployments
-            WHERE deployment_id = $1
-            """,
-            deployment_id,
-        )
-
-        if not current_vers:
-            raise HTTPException(status_code=404, detail="Deployment not found.")
-
-        model_name = current_vers["model_name"]
-        previous_vers = await conn.fetchrow(
-            """
-            SELECT deployment_id, model_name, model_version
-            FROM deployments
-            WHERE model_name = $1 AND deployment_id < $2
-            ORDER BY deployment_id DESC
-            LIMIT 1
-        """,
-            model_name,
-            deployment_id,
-        )
-        if not previous_vers:
-            raise HTTPException(
-                status_code=404, detail="Previous deployment is not available."
+        if status is None:
+            logger.warning(
+                f"Job {job_id} not found",
+                extra={"job_id": job_id, "event": "job_not_found"},
             )
+            raise HTTPException(status_code=404, detail="Job not found")
 
-        previous = previous_vers["model_version"]
-
-        rolled_vers_id = await conn.fetchval(
-            """
-            INSERT INTO deployments (model_name, model_version, status)
-            VALUES ($1, $2, 'rolled_back')
-            RETURNING deployment_id
-            """,
-            model_name,
-            previous,
+        logger.info(
+            "Dataset registration started", extra={"event": "dataset_reg_started"}
         )
-        return {
-            "status": "rolled back successfully",
-            "deployment_id": rolled_vers_id,
-            "model_name": model_name,
-            "model_version": previous,
-        }
+        return {"job_id": job_id, "status": status}
 
 
-@app.get("/jobs")
-async def get_all_jobs():
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        jobs = await conn.fetch("""
-        SELECT * FROM jobs ORDER BY job_id DESC
-        """)
-
-    return [dict(job) for job in jobs]
-
-
-@app.get("/datasets")
-async def get_all_datasets():
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        datasets = await conn.fetch("""
-            SELECT * FROM datasets ORDER BY dataset_id DESC
-            """)
-
-    return [dict(dataset) for dataset in datasets]
-
-
-@app.get("/models")
-async def get_all_models():
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        models = await conn.fetch("""
-            SELECT * FROM trained_models ORDER BY created_at DESC
-            """)
-
-    return [dict(model) for model in models]
-
-
-@app.get("/deployments")
-async def get_all_deployments():
-    if db_pool is None:
-        raise HTTPException(status_code=503, detail="Database is not available.")
-    async with db_pool.acquire() as conn:
-        deployments = await conn.fetch("""
-            SELECT * FROM deployments ORDER BY deployment_id DESC
-            """)
-
-    return [dict(deployment) for deployment in deployments]
+@app.post("/datasets")
+def register_dataset():
+    logger.info("Dataset registration started", extra={"event": "dataset_reg_started"})
+    return {"status": "ok"}

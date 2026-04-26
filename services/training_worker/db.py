@@ -3,18 +3,6 @@ import json
 db_pool = None
 
 
-async def recover_stuck_jobs():
-    import logging
-
-    async with db_pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE jobs
-            SET status = 'pending'
-            WHERE status = 'running'
-        """)
-    logging.info("Recovered stuck jobs")
-
-
 async def get_job():
     async with db_pool.acquire() as conn:
         return await conn.fetchrow("""

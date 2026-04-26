@@ -1,6 +1,6 @@
 from cachetools import LRUCache
 import asyncio
-from minio_client import get_model_from_minio
+from services.inference_service.minio_client import get_model_from_minio
 from tenacity import retry, stop_after_attempt, wait_exponential
 from minio.error import S3Error
 
