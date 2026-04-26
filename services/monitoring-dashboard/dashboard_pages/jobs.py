@@ -10,7 +10,7 @@ def render_jobs_page():
 
     jobs_result = get_jobs()
 
-    if not jobs_result["ok"]:
+    if not jobs_result["ok"] or jobs_result["data"].empty:
         render_table(
             jobs_result,
             "Jobs",
@@ -20,31 +20,15 @@ def render_jobs_page():
 
     df = jobs_result["data"]
 
-    if df.empty:
-        render_table(
-            jobs_result,
-            "Jobs",
-            "No jobs found yet. Start a training job to populate this table.",
-        )
-        return
-
     status_options = ["All"] + sorted(df["status"].dropna().unique().tolist())
-
-    status_filter = st.selectbox(
-        "Filter by Status",
-        status_options,
-    )
+    status_filter = st.selectbox("Filter by Status", status_options)
 
     filtered_df = df.copy()
 
     if status_filter != "All":
         filtered_df = filtered_df[filtered_df["status"] == status_filter]
 
-    filtered_result = {
-        "ok": True,
-        "data": filtered_df,
-        "error": None,
-    }
+    filtered_result = {"ok": True, "data": filtered_df, "error": None}
 
     render_table(
         filtered_result,
@@ -54,6 +38,15 @@ def render_jobs_page():
 
     if filtered_df.empty:
         return
+
+    csv = filtered_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download Jobs as CSV",
+        data=csv,
+        file_name="jobs.csv",
+        mime="text/csv",
+    )
 
     st.divider()
 
