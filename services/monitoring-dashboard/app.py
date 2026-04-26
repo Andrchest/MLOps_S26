@@ -32,6 +32,7 @@ def login():
     if st.button("Login"):
         if username == "admin" and password == "admin123":
             st.session_state.authenticated = True
+            st.session_state.username = username
             st.rerun()
         else:
             st.error("Invalid credentials")
@@ -49,27 +50,45 @@ st.title("Monitoring Dashboard")
 st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-page = st.sidebar.radio(
-    "Navigate",
-    [
-        "System Overview",
-        "Jobs",
-        "Datasets",
-        "Models",
-        "Deployments",
-        "Inference",
-        "Monitoring",
-        "System Health",
-    ],
+st.sidebar.title("Navigation")
+
+section = st.sidebar.radio(
+    "Sections",
+    ["Overview", "Operations", "Monitoring", "System"],
 )
+
+if section == "Overview":
+    page = "System Overview"
+
+elif section == "Operations":
+    page = st.sidebar.radio(
+        "Operations",
+        ["Jobs", "Datasets", "Models", "Deployments"],
+    )
+
+elif section == "Monitoring":
+    page = st.sidebar.radio(
+        "Monitoring",
+        ["Inference", "Monitoring"],
+    )
+
+else:
+    page = "System Health"
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(f"**User:** {st.session_state.get('username', 'admin')}")
+
+if st.sidebar.button("Refresh"):
+    st.rerun()
 
 if st.sidebar.button("Logout"):
     st.session_state.authenticated = False
     st.rerun()
 
-if st.sidebar.button("Refresh"):
-    st.rerun()
 
+# ----------------------
+# DB Health Check
+# ----------------------
 db_ok, db_error = check_db_health()
 
 if not db_ok:
