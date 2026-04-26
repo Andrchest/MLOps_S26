@@ -122,7 +122,9 @@ async def save_log(response: PredictResponse):
         logging.warning("Failed to save prediction log: %s", exc)
 
 
-async def get_model_context(model_name: str, model_version: str) -> dict[str, Any] | None:
+async def get_model_context(
+    model_name: str, model_version: str
+) -> dict[str, Any] | None:
     query = """
     SELECT
         tm.parameters,

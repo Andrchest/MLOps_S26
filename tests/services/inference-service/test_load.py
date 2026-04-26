@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-
 current_file = Path(__file__).resolve()
 app_dir = current_file.parents[3] / "services" / "inference-service"
 app_path = app_dir / "app.py"

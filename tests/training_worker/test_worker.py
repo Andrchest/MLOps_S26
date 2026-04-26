@@ -4,7 +4,6 @@ import tempfile
 
 import services.training_worker.worker as worker_module
 
-
 FAKE_JOB = {
     "job_id": 1,
     "dataset_name": "data.csv",

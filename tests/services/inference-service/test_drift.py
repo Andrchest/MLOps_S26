@@ -4,7 +4,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-
 current_file = Path(__file__).resolve()
 app_dir = current_file.parents[3] / "services" / "inference-service"
 app_path = app_dir / "app.py"
@@ -19,7 +18,9 @@ sys.modules["app_drift_module"] = app_module
 spec.loader.exec_module(app_module)
 
 schemas_path = app_dir / "schemas.py"
-schemas_spec = importlib.util.spec_from_file_location("schemas_module", str(schemas_path))
+schemas_spec = importlib.util.spec_from_file_location(
+    "schemas_module", str(schemas_path)
+)
 schemas_module = importlib.util.module_from_spec(schemas_spec)
 sys.modules["schemas_module"] = schemas_module
 schemas_spec.loader.exec_module(schemas_module)
