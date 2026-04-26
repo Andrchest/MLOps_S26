@@ -38,7 +38,7 @@ jobs:
         run: pytest tests/
 
       - name: Validate DVC Pipeline
-        run: dvc repro --dry
+        run: dvc repro
 
   docker-build-check:
     name: Test Docker Builds
