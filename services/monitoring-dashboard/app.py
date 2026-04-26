@@ -86,11 +86,36 @@ if page == "System Overview":
 
 elif page == "Jobs":
     st.header("Jobs")
+
+    jobs_result = get_jobs()
+
     render_table(
-        get_jobs(),
+        jobs_result,
         "Jobs",
         "No jobs found yet. Start a training job to populate this table.",
     )
+
+    if jobs_result["ok"] and not jobs_result["data"].empty:
+        df = jobs_result["data"]
+
+        selected_job_id = st.selectbox(
+            "Select Job ID to view details",
+            df["job_id"].tolist(),
+        )
+
+        selected_job = df[df["job_id"] == selected_job_id].iloc[0]
+
+        st.markdown("### Job Details")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write(f"**Job ID:** {selected_job['job_id']}")
+            st.write(f"**Dataset Name:** {selected_job['dataset_name']}")
+
+        with col2:
+            st.write(f"**Dataset ID:** {selected_job['dataset_id']}")
+            st.write(f"**Status:** {selected_job['status']}")
 
 elif page == "Datasets":
     st.header("Datasets")
