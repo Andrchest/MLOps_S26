@@ -82,7 +82,7 @@ services:
           cpus: "0.5"
 
   orchestrator:
-    build: 
+    build:
       context: .
       dockerfile: services/orchestrator/Dockerfile
     volumes:
