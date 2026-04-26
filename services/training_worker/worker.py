@@ -1,19 +1,34 @@
 import asyncio
-import subprocess
-import mlflow
+import json
 import os
+import subprocess
+import tempfile
+
+import mlflow
 from mlflow.tracking import MlflowClient
-from db import (
-    get_job,
-    update_status,
-    save_trained_model,
-)
-from minio_client import (
-    download_dataset,
-    save_model_to_minio,
-)
+try:
+    from db import (
+        get_job,
+        save_trained_model,
+        update_status,
+    )
+    from minio_client import (
+        download_dataset,
+        save_model_to_minio,
+    )
+except ModuleNotFoundError:
+    from .db import (
+        get_job,
+        save_trained_model,
+        update_status,
+    )
+    from .minio_client import (
+        download_dataset,
+        save_model_to_minio,
+    )
 
 POLL_INTERVAL = 5
+TMP_ROOT = os.getenv("WORKER_TMP_DIR", tempfile.gettempdir())
 
 
 async def worker_loop():
@@ -48,7 +63,7 @@ async def process_job(job):
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
         dataset_object_name = job.get("dataset_path") or dataset_name
         local_file_name = os.path.basename(dataset_object_name)
-        data_path = os.path.join("/tmp", local_file_name)
+        data_path = os.path.join(TMP_ROOT, local_file_name)
         os.makedirs(os.path.dirname(data_path), exist_ok=True)
         log.info(f"Downloading to {data_path}")
         download_dataset(dataset_object_name, data_path)
@@ -57,6 +72,7 @@ async def process_job(job):
         if csv_path != data_path:
             shutil.move(data_path, csv_path)
         log.info(f"Moved to {csv_path}")
+        artifacts_dir = os.path.join(TMP_ROOT, f"training_artifacts_{job_id}")
         result = subprocess.run(
             [
                 "python",
@@ -65,6 +81,8 @@ async def process_job(job):
                 csv_path,
                 "--job_id",
                 str(job_id),
+                "--artifacts-dir",
+                artifacts_dir,
             ],
             capture_output=True,
             text=True,
@@ -98,9 +116,13 @@ async def process_job(job):
         run = runs[0]
         run_id = run.info.run_id
 
-        params = run.data.params
+        params = dict(run.data.params)
         metrics = run.data.metrics
         model_name = run.data.params["model_type"]
+        reference_profile_path = os.path.join(artifacts_dir, "reference_profile.json")
+        if os.path.exists(reference_profile_path):
+            with open(reference_profile_path, "r", encoding="utf-8") as file:
+                params["reference_profile"] = json.load(file)
 
         local_model_path = mlflow.artifacts.download_artifacts(
             artifact_uri=f"runs:/{run_id}/model"

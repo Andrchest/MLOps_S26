@@ -66,8 +66,10 @@ class TestReloadConcurrency(unittest.IsolatedAsyncioTestCase):
         old_executor = app_module.model_executor
 
         # Mock the prediction to be slow
-        async def slow_prediction_mock(*args, **kwargs):
-            await asyncio.sleep(2.0)  # Reduced from 5.0 for faster tests
+        def slow_prediction_mock(*args, **kwargs):
+            import time
+
+            time.sleep(2.0)
             return 1, 0.99
 
         with patch("app_module._run_prediction", side_effect=slow_prediction_mock):

@@ -10,7 +10,10 @@ import services.orchestrator.dataset_service as dataset_service
 client = TestClient(orchestrator_app.app)
 
 
-def _post_dataset(filename: str = "breast_cancer.csv", content: bytes = b"a,b,target\n1,2,0\n"):
+def _post_dataset(
+    filename: str = "breast_cancer.csv",
+    content: bytes = b"a,b,target\n1,2,0\n",
+):
     return client.post(
         "/datasets",
         files={"file": (filename, BytesIO(content), "text/csv")},
@@ -29,9 +32,15 @@ def test_duplicate_uploads_are_idempotent(monkeypatch):
         exists_counter["count"] += 1
         return exists_counter["count"] > 1
 
-    monkeypatch.setattr(orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None)
-    monkeypatch.setattr(orchestrator_app.storage_client, "object_exists", fake_object_exists)
-    monkeypatch.setattr(orchestrator_app.storage_client.client, "put_object", put_object)
+    monkeypatch.setattr(
+        orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client, "object_exists", fake_object_exists
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client.client, "put_object", put_object
+    )
 
     first_response = _post_dataset()
     second_response = _post_dataset()
@@ -46,9 +55,17 @@ def test_duplicate_uploads_are_idempotent(monkeypatch):
 def test_failed_upload_recovers_with_retry(monkeypatch):
     put_object = MagicMock(side_effect=[Exception("temporary failure"), MagicMock()])
 
-    monkeypatch.setattr(orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None)
-    monkeypatch.setattr(orchestrator_app.storage_client, "object_exists", lambda bucket_name, object_name: False)
-    monkeypatch.setattr(orchestrator_app.storage_client.client, "put_object", put_object)
+    monkeypatch.setattr(
+        orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client,
+        "object_exists",
+        lambda bucket_name, object_name: False,
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client.client, "put_object", put_object
+    )
     monkeypatch.setattr(dataset_service.time, "sleep", lambda _: None)
 
     response = _post_dataset()
@@ -61,9 +78,17 @@ def test_failed_upload_recovers_with_retry(monkeypatch):
 def test_minio_unavailability_returns_503(monkeypatch):
     put_object = MagicMock(side_effect=Exception("minio unavailable"))
 
-    monkeypatch.setattr(orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None)
-    monkeypatch.setattr(orchestrator_app.storage_client, "object_exists", lambda bucket_name, object_name: False)
-    monkeypatch.setattr(orchestrator_app.storage_client.client, "put_object", put_object)
+    monkeypatch.setattr(
+        orchestrator_app.storage_client, "ensure_bucket", lambda bucket_name: None
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client,
+        "object_exists",
+        lambda bucket_name, object_name: False,
+    )
+    monkeypatch.setattr(
+        orchestrator_app.storage_client.client, "put_object", put_object
+    )
     monkeypatch.setattr(dataset_service.time, "sleep", lambda _: None)
 
     response = _post_dataset()

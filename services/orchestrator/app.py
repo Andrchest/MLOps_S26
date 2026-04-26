@@ -4,12 +4,20 @@ import os
 import asyncpg
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from dataset_service import (
-    DatasetRecord,
-    dataset_registry,
-    register_uploaded_dataset,
-    storage_client,
-)
+try:
+    from dataset_service import (
+        DatasetRecord,
+        dataset_registry,
+        register_uploaded_dataset,
+        storage_client,
+    )
+except ModuleNotFoundError:
+    from .dataset_service import (
+        DatasetRecord,
+        dataset_registry,
+        register_uploaded_dataset,
+        storage_client,
+    )
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")

@@ -1,0 +1,26 @@
+stages:
+  preprocess_dataset:
+    cmd: python pipelines/data_ingestion/preprocess.py --input ${preprocess.input} --output ${preprocess.output} --target-column ${preprocess.target_column}
+    deps:
+      - pipelines/data_ingestion/preprocess.py
+      - pipelines/first_ml_baseline/data/breast_cancer.csv
+    params:
+      - preprocess.input
+      - preprocess.output
+      - preprocess.target_column
+    outs:
+      - artifacts/dvc/processed/breast_cancer.csv
+
+  train_model:
+    cmd: python pipelines/training/dvc_train.py --data ${preprocess.output} --artifacts-dir ${train.artifacts_dir} --target-column ${train.target_column}
+    deps:
+      - pipelines/training/dvc_train.py
+      - pipelines/first_ml_baseline/train.py
+      - artifacts/dvc/processed/breast_cancer.csv
+    params:
+      - train.artifacts_dir
+      - train.target_column
+    outs:
+      - artifacts/dvc/model/model.joblib
+      - artifacts/dvc/model/metrics.json
+      - artifacts/dvc/model/reference_profile.json

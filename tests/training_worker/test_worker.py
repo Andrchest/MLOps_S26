@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+import tempfile
 
 import services.training_worker.worker as worker_module
 
@@ -64,7 +65,10 @@ async def test_process_job_success(
 
     await worker_module.process_job(FAKE_JOB)
 
-    mock_download_dataset.assert_called_once_with("data.csv", "/tmp/data.csv")
+    expected_path = f"{tempfile.gettempdir()}/data.csv".replace("\\", "/")
+    actual_args = mock_download_dataset.call_args[0]
+    assert actual_args[0] == "data.csv"
+    assert actual_args[1].replace("\\", "/") == expected_path
     mock_update_status.assert_any_call(1, "persisting")
     mock_update_status.assert_any_call(1, "succeeded")
 
@@ -126,7 +130,7 @@ async def test_process_job_uses_dataset_path_when_present(
 
     await worker_module.process_job(FAKE_JOB_WITH_PATH)
 
-    mock_download_dataset.assert_called_once_with(
-        "datasets/breast_cancer/hash123.csv",
-        "/tmp/hash123.csv",
-    )
+    expected_path = f"{tempfile.gettempdir()}/hash123.csv".replace("\\", "/")
+    actual_args = mock_download_dataset.call_args[0]
+    assert actual_args[0] == "datasets/breast_cancer/hash123.csv"
+    assert actual_args[1].replace("\\", "/") == expected_path

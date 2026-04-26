@@ -1,0 +1,8 @@
+[core]
+    remote = minio
+['remote "minio"']
+    url = s3://mlops-dvc
+    endpointurl = http://localhost:9000
+    access_key_id = ${MINIO_ROOT_USER}
+    secret_access_key = ${MINIO_ROOT_PASSWORD}
+    use_ssl = false
