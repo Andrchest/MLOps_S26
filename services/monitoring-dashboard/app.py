@@ -1,30 +1,33 @@
-import streamlit as st
+from datetime import datetime
+
 import pandas as pd
+import streamlit as st
 
 from db import check_db_health
 from repository import (
-    get_job_status_counts,
-    get_jobs,
-    get_models,
-    get_recent_prediction_logs,
-    get_total_jobs,
-    get_total_models,
     get_datasets,
     get_deployments,
-    get_latency_stats,
-    get_prediction_status_distribution,
-    get_service_health,
-    get_total_predictions,
-    get_successful_predictions,
     get_failed_predictions,
+    get_job_status_counts,
+    get_jobs,
+    get_latency_stats,
+    get_models,
+    get_prediction_status_distribution,
     get_prediction_trend,
+    get_recent_prediction_logs,
+    get_service_health,
+    get_successful_predictions,
+    get_total_jobs,
+    get_total_models,
+    get_total_predictions,
 )
-from ui import render_table, render_metric, render_health_table
+from ui import render_health_table, render_metric, render_table
 
 st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
 st.title("Monitoring Dashboard")
 st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
+st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 page = st.sidebar.radio(
     "Navigate",
@@ -83,19 +86,35 @@ if page == "System Overview":
 
 elif page == "Jobs":
     st.header("Jobs")
-    render_table(get_jobs(), "Jobs", "No jobs found.")
+    render_table(
+        get_jobs(),
+        "Jobs",
+        "No jobs found yet. Start a training job to populate this table.",
+    )
 
 elif page == "Datasets":
     st.header("Datasets")
-    render_table(get_datasets(), "Datasets", "No datasets found.")
+    render_table(
+        get_datasets(),
+        "Datasets",
+        "No datasets found yet. Upload a dataset using the orchestrator API.",
+    )
 
 elif page == "Models":
     st.header("Models")
-    render_table(get_models(), "Trained Models", "No models found.")
+    render_table(
+        get_models(),
+        "Trained Models",
+        "No trained models found yet. Complete a training job to populate this table.",
+    )
 
 elif page == "Deployments":
     st.header("Deployments")
-    render_table(get_deployments(), "Deployments", "No deployments found.")
+    render_table(
+        get_deployments(),
+        "Deployments",
+        "No deployments found yet. Train and deploy a model to populate this table.",
+    )
 
 elif page == "Monitoring":
     st.header("Monitoring")
