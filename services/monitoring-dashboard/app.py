@@ -23,11 +23,18 @@ from repository import (
 )
 from ui import render_health_table, render_metric, render_status_badge, render_table
 
+st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
+
+# ----------------------
+# Mock Authentication
+# ----------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
+
 def login():
-    st.title("Login")
+    st.title("Monitoring Dashboard")
+    st.caption("Sign in to access the MLOps monitoring dashboard.")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -39,12 +46,15 @@ def login():
         else:
             st.error("Invalid credentials")
 
+
 if not st.session_state.authenticated:
     login()
     st.stop()
 
-st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
+# ----------------------
+# Dashboard Shell
+# ----------------------
 st.title("Monitoring Dashboard")
 st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -62,6 +72,8 @@ page = st.sidebar.radio(
         "System Health",
     ],
 )
+
+st.sidebar.button("Refresh")
 
 db_ok, db_error = check_db_health()
 
