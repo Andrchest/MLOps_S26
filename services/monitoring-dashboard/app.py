@@ -127,11 +127,51 @@ elif page == "Datasets":
 
 elif page == "Models":
     st.header("Models")
+
+    models_result = get_models()
+
     render_table(
-        get_models(),
+        models_result,
         "Trained Models",
         "No trained models found yet. Complete a training job to populate this table.",
     )
+
+    if models_result["ok"] and not models_result["data"].empty:
+        df = models_result["data"]
+
+        model_options = (
+            df["model_name"].astype(str)
+            + " / "
+            + df["model_version"].astype(str)
+            + " / Job "
+            + df["job_id"].astype(str)
+        )
+
+        selected_option = st.selectbox(
+            "Select model to view details",
+            model_options.tolist(),
+        )
+
+        selected_index = model_options[model_options == selected_option].index[0]
+        selected_model = df.loc[selected_index]
+
+        st.markdown("### Model Details")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write(f"**Model Name:** {selected_model['model_name']}")
+            st.write(f"**Model Version:** {selected_model['model_version']}")
+            st.write(f"**Job ID:** {selected_model['job_id']}")
+
+        with col2:
+            st.write(f"**Model Path:** {selected_model['model_path']}")
+
+        st.markdown("### Metrics")
+        st.json(selected_model["metrics"])
+
+        st.markdown("### Parameters")
+        st.json(selected_model["parameters"])
 
 elif page == "Deployments":
     st.header("Deployments")
