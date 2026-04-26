@@ -75,6 +75,8 @@ Detailed documentation, architecture decisions, and service contracts are kept i
 
 **Key Documents:**
 * **[Monitoring & Logging Contract](./docs/logs_contract.md):** Specifies the required payload and database schema for logging prediction requests (Sprint 1).
+* **[Drift Detection Guide](./docs/drift_detection.md):** Explains the simple drift check and retraining trigger.
+* **[DVC Guide](./docs/dvc.md):** Explains the DVC pipeline and MinIO remote.
 * *(More links in future)*
 
 ---
