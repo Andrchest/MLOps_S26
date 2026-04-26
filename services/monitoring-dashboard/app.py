@@ -21,7 +21,7 @@ from repository import (
     get_total_models,
     get_total_predictions,
 )
-from ui import render_health_table, render_metric, render_table
+from ui import render_health_table, render_metric, render_status_badge, render_table
 
 st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
@@ -98,32 +98,31 @@ elif page == "Jobs":
     if jobs_result["ok"] and not jobs_result["data"].empty:
         df = jobs_result["data"]
 
+        st.divider()
+
         selected_job_id = st.selectbox(
-            "Select Job ID to view details",
+            "Select Job",
             df["job_id"].tolist(),
+            format_func=lambda job_id: f"Job #{job_id}",
         )
 
         selected_job = df[df["job_id"] == selected_job_id].iloc[0]
 
         st.markdown("### Job Details")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.write(f"**Job ID:** {selected_job['job_id']}")
-            st.write(f"**Dataset Name:** {selected_job['dataset_name']}")
+            render_metric("Job ID", selected_job["job_id"])
 
         with col2:
-            st.write(f"**Dataset ID:** {selected_job['dataset_id']}")
-            st.write(f"**Status:** {selected_job['status']}")
+            render_metric("Dataset ID", selected_job["dataset_id"])
 
-elif page == "Datasets":
-    st.header("Datasets")
-    render_table(
-        get_datasets(),
-        "Datasets",
-        "No datasets found yet. Upload a dataset using the orchestrator API.",
-    )
+        with col3:
+            st.metric("Status", render_status_badge(selected_job["status"]))
+
+        st.markdown("#### Dataset")
+        st.info(selected_job["dataset_name"])
 
 elif page == "Models":
     st.header("Models")
@@ -139,39 +138,40 @@ elif page == "Models":
     if models_result["ok"] and not models_result["data"].empty:
         df = models_result["data"]
 
-        model_options = (
-            df["model_name"].astype(str)
-            + " / "
-            + df["model_version"].astype(str)
-            + " / Job "
-            + df["job_id"].astype(str)
+        st.divider()
+
+        selected_model_index = st.selectbox(
+            "Select Model",
+            df.index.tolist(),
+            format_func=lambda index: (
+                f"{df.loc[index, 'model_name']} "
+                f"(v{df.loc[index, 'model_version']})"
+            ),
         )
 
-        selected_option = st.selectbox(
-            "Select model to view details",
-            model_options.tolist(),
-        )
-
-        selected_index = model_options[model_options == selected_option].index[0]
-        selected_model = df.loc[selected_index]
+        selected_model = df.loc[selected_model_index]
 
         st.markdown("### Model Details")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.write(f"**Model Name:** {selected_model['model_name']}")
-            st.write(f"**Model Version:** {selected_model['model_version']}")
-            st.write(f"**Job ID:** {selected_model['job_id']}")
+            render_metric("Model Name", selected_model["model_name"])
 
         with col2:
-            st.write(f"**Model Path:** {selected_model['model_path']}")
+            render_metric("Version", selected_model["model_version"])
 
-        st.markdown("### Metrics")
-        st.json(selected_model["metrics"])
+        with col3:
+            render_metric("Job ID", selected_model["job_id"])
 
-        st.markdown("### Parameters")
-        st.json(selected_model["parameters"])
+        st.markdown("#### Model Path")
+        st.code(selected_model["model_path"])
+
+        with st.expander("Metrics", expanded=True):
+            st.json(selected_model["metrics"])
+
+        with st.expander("Parameters"):
+            st.json(selected_model["parameters"])
 
 elif page == "Deployments":
     st.header("Deployments")
