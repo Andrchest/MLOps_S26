@@ -18,7 +18,7 @@ SERVICES = {
     ),
     "inference": os.getenv(
         "INFERENCE_HEALTH_URL",
-        "http://inference-service:8000/health",
+        "http://inference_service:8000/health",
     ),
     "monitoring": os.getenv(
         "MONITORING_HEALTH_URL",
