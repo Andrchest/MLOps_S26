@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 import asyncpg
 import os
+import asyncio
 import logging
 from shared.utils.logging_utils import setup_logging
 from asgi_correlation_id import CorrelationIdMiddleware
@@ -12,7 +13,6 @@ app.add_middleware(
 
 # Initialize logger
 logger = logging.getLogger(__name__)
-
 
 from services.orchestrator.dataset_service import (
     DatasetRecord,
@@ -27,31 +27,42 @@ app = FastAPI()
 db_pool = None
 
 
-async def init_db() -> None:
+async def create_db_pool_with_retry(max_retries=10, retry_delay=2):
+    """Create DB pool with retry logic for resilience."""
     global db_pool
-    logger.info("Creating DB pool", extra={"event": "db_pool_creating"})
-    db_pool = await asyncpg.create_pool(
-        user=os.getenv("POSTGRES_USER", "mlops"),
-        password=os.getenv("POSTGRES_PASSWORD", "mlops"),
-        database=os.getenv("POSTGRES_DB", "mlops"),
-        host=os.getenv("POSTGRES_HOST", "postgres"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-    )
-    logger.info("DB pool created successfully", extra={"event": "db_pool_ready"})
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Creating DB pool (attempt {attempt + 1}/{max_retries})")
+            db_pool = await asyncpg.create_pool(
+                user=os.getenv("POSTGRES_USER", "mlops"),
+                password=os.getenv("POSTGRES_PASSWORD", "mlops"),
+                database=os.getenv("POSTGRES_DB", "mlops"),
+                host=os.getenv("POSTGRES_HOST", "postgres"),
+                port=int(os.getenv("POSTGRES_PORT", "5432")),
+            )
+            logger.info("DB pool created successfully", extra={"event": "db_pool_ready"})
+            return db_pool
+        except Exception as e:
+            logger.warning(f"DB connection failed: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+            else:
+                raise Exception(f"Could not connect to DB after {max_retries} attempts")
 
 
 @app.on_event("startup")
 async def startup():
     setup_logging("orchestrator")
     logger.info("Orchestrator starting up...", extra={"event": "startup_initiated"})
-    await init_db()
+    await create_db_pool_with_retry()
     logger.info("Orchestrator startup complete.", extra={"event": "startup_finished"})
 
 
 @app.on_event("shutdown")
 async def shutdown():
     logger.info("Orchestrator shutting down...", extra={"event": "shutdown_initiated"})
-    await db_pool.close()
+    if db_pool:
+        await db_pool.close()
     logger.info("Orchestrator shutdown complete.", extra={"event": "shutdown_finished"})
 
 
@@ -62,37 +73,6 @@ def health():
 
 
 @app.post("/train", status_code=201)
-<<<<<<< HEAD
-async def train(dataset_name: str, dataset_id: int):
-    log_ctx = {"dataset_name": dataset_name, "dataset_id": dataset_id}
-    logger.info(
-        "Training job creation requested",
-        extra={**log_ctx, "event": "train_request_received"},
-    )
-    try:
-        async with db_pool.acquire() as conn:
-            job_id = await conn.fetchval(
-                """
-                INSERT INTO jobs (dataset_name, dataset_id, status)
-                VALUES ($1, $2, 'pending')
-                RETURNING job_id
-                """,
-                dataset_name,
-                dataset_id,
-            )
-            logger.info(
-                "Training job created",
-                extra={**log_ctx, "job_id": job_id, "event": "job_created_in_db"},
-            )
-            return {"job_id": job_id, "status": "pending"}
-    except Exception as e:
-        logger.error(
-            f"Failed to create job: {e}",
-            extra={**log_ctx, "event": "job_creation_failed"},
-            exc_info=True,
-        )
-        raise HTTPException(status_code=500, detail="Failed to create training job")
-=======
 async def train(client_id: str, dataset_name: str, dataset_id: int):
     if db_pool is None:
         raise HTTPException(status_code=503, detail="Database is not available.")
@@ -122,7 +102,6 @@ async def train(client_id: str, dataset_name: str, dataset_id: int):
 
     except Exception:
         raise HTTPException(status_code=503, detail="Database error")
->>>>>>> origin/feature/training-worker-week3
 
 
 @app.get("/jobs/{job_id}")
@@ -153,12 +132,6 @@ async def get_status(job_id: int):
         return {"job_id": job_id, "status": status}
 
 
-<<<<<<< HEAD
-@app.post("/datasets")
-def register_dataset():
-    logger.info("Dataset registration started", extra={"event": "dataset_reg_started"})
-    return {"status": "ok"}
-=======
 @app.get("/datasets/{dataset_id}", response_model=DatasetRecord)
 def get_dataset(dataset_id: int):
     dataset = dataset_registry.get(dataset_id)
@@ -242,4 +215,3 @@ async def rollback(model_name: str):
         )
 
     return {"status": "rolled back"}
->>>>>>> origin/feature/training-worker-week3

@@ -3,6 +3,7 @@ services:
     image: grafana/loki:latest
     ports:
       - "3100:3100"
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
@@ -10,6 +11,7 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml
+    restart: unless-stopped
 
   postgres:
     image: postgres:15
@@ -22,14 +24,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 256M
-          cpus: "0.25"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   minio:
     image: minio/minio
@@ -42,14 +42,12 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-        reservations:
-          memory: 128M
-          cpus: "0.1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   minio-seed:
     image: minio/mc:latest
@@ -69,17 +67,19 @@ services:
       mc cp /seeds/sample_dataset.csv myminio/datasets/test_data;
       echo 'Seed complete.';
       "
+    restart: "no"
 
   mlflow:
     image: ghcr.io/mlflow/mlflow
     command: mlflow server --host 0.0.0.0 --port 5000 --disable-security-middleware
     ports:
       - "5000:5000"
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   orchestrator:
     build:
@@ -94,17 +94,16 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - mlflow
-      - loki
-    logging:
-      driver: "loki"
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-external-labels: "project=mlops,service=orchestrator"
-        loki-retries: 2
-        loki-max-backoff: 1000ms
-        loki-timeout: 1s
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   training-worker:
     build:
@@ -118,24 +117,24 @@ services:
     environment:
       PYTHONUNBUFFERED: 1
       LOG_LEVEL: DEBUG
-      MLFLOW_TRACKING_URI: "http://mlflow:5000"
-      MINIO_ENDPOINT: "minio:9000"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MINIO_ENDPOINT: minio:9000
     depends_on:
-      - postgres
-      - mlflow
-      - minio
-      - loki
-    logging:
-      driver: "loki"
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-external-labels: "project=mlops,service=training-worker"
-        loki-retries: 2
-        loki-max-backoff: 1000ms
-        loki-timeout: 1s
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8500/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   inference-service:
-    build: 
+    build:
       context: .
       dockerfile: ./services/inference_service/Dockerfile
     volumes:
@@ -147,20 +146,19 @@ services:
     ports:
       - "8001:8001"
     depends_on:
-      - mlflow
-      - minio
-      - loki
-    logging:
-      driver: "loki"
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-external-labels: "project=mlops,service=inference-service"
-        loki-retries: 2
-        loki-max-backoff: 1000ms
-        loki-timeout: 1s
+      mlflow:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   monitoring-service:
-    build: 
+    build:
       context: .
       dockerfile: ./services/monitoring_service/Dockerfile
     volumes:
@@ -172,19 +170,17 @@ services:
     ports:
       - "8002:8002"
     depends_on:
-      - postgres
-      - loki
-    logging:
-      driver: "loki"
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-external-labels: "project=mlops,service=monitoring-service"
-        loki-retries: 2
-        loki-max-backoff: 1000ms
-        loki-timeout: 1s
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   monitoring-dashboard:
-    build: 
+    build:
       context: .
       dockerfile: ./services/monitoring_dashboard/Dockerfile
     volumes:
@@ -196,18 +192,15 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      - postgres
-      - loki
-    logging:
-      driver: "loki"
-      options:
-        loki-url: "http://localhost:3100/loki/api/v1/push"
-        loki-external-labels: "project=mlops,service=monitoring-dashboard"
-        loki-retries: 2
-        loki-max-backoff: 1000ms
-        loki-timeout: 1s
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   minio_data:
-  
