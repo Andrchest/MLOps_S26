@@ -3,6 +3,19 @@ from typing import Any
 import pandas as pd
 import requests
 
+import os
+
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
+
+
+def safe_api_to_df(endpoint: str) -> dict[str, Any]:
+    try:
+        response = requests.get(f"{ORCHESTRATOR_URL}{endpoint}", timeout=3)
+        response.raise_for_status()
+        return {"ok": True, "data": pd.DataFrame(response.json()), "error": None}
+    except Exception as exc:
+        return {"ok": False, "data": pd.DataFrame(), "error": str(exc)}
+
 from db import get_connection
 
 
@@ -89,32 +102,12 @@ def get_prediction_status_distribution():
     """)
 
 
-# ----------------------
-# Datasets (placeholder until backend ready)
-# ----------------------
 def get_datasets():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Datasets backend contract is pending. \
-            This page is prepared for integration.",
-    }
+    return safe_api_to_df("/datasets")
 
 
-# ----------------------
-# Deployments (placeholder)
-# ----------------------
 def get_deployments():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Deployments backend contract is pending. \
-            This page is prepared for integration.",
-    }
+    return safe_api_to_df("/deployments")
 
 
 # ----------------------

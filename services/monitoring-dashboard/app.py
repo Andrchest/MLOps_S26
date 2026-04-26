@@ -87,13 +87,7 @@ elif page == "Jobs":
 
 elif page == "Datasets":
     st.header("Datasets")
-    datasets_result = get_datasets()
-
-    if datasets_result.get("source") == "placeholder":
-        st.info(datasets_result["message"])
-        st.caption("Awaiting backend/API support for datasets listing.")
-    else:
-        render_table(datasets_result, "Datasets", "No datasets found.")
+    render_table(get_datasets(), "Datasets", "No datasets found.")
 
 elif page == "Models":
     st.header("Models")
@@ -101,13 +95,7 @@ elif page == "Models":
 
 elif page == "Deployments":
     st.header("Deployments")
-    deployments_result = get_deployments()
-
-    if deployments_result.get("source") == "placeholder":
-        st.info(deployments_result["message"])
-        st.caption("Awaiting backend/API support for deployments listing.")
-    else:
-        render_table(deployments_result, "Deployments", "No deployments found.")
+    render_table(get_deployments(), "Deployments", "No deployments found.")
 
 elif page == "Monitoring":
     st.header("Monitoring")
