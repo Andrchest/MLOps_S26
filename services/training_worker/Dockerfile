@@ -5,8 +5,7 @@ WORKDIR /app
 COPY services/training_worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/ services/
-COPY pipelines/ pipelines/
+COPY . .
 
 ENV PYTHONPATH=/app
 
