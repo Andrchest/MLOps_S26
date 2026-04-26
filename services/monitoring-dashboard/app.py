@@ -23,6 +23,26 @@ from repository import (
 )
 from ui import render_health_table, render_metric, render_status_badge, render_table
 
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+def login():
+    st.title("Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username == "admin" and password == "admin123":
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+if not st.session_state.authenticated:
+    login()
+    st.stop()
+
 st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
 st.title("Monitoring Dashboard")
