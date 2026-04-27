@@ -2,7 +2,7 @@ fastapi
 uvicorn
 pydantic
 asyncpg
-mlflow
+mlflow==2.17.0
 minio
 pandas
 scikit-learn

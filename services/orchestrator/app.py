@@ -28,13 +28,25 @@ db_pool = None
 
 async def init_db() -> None:
     global db_pool
-    db_pool = await asyncpg.create_pool(
-        user=os.getenv("POSTGRES_USER", "mlops"),
-        password=os.getenv("POSTGRES_PASSWORD", "mlops"),
-        database=os.getenv("POSTGRES_DB", "mlops"),
-        host=os.getenv("POSTGRES_HOST", "postgres"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-    )
+    import asyncio
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = int(os.getenv("POSTGRES_PORT", "5432"))
+    user = os.getenv("POSTGRES_USER", "mlops")
+    password = os.getenv("POSTGRES_PASSWORD", "mlops")
+    database = os.getenv("POSTGRES_DB", "mlops")
+    
+    for attempt in range(30):
+        try:
+            db_pool = await asyncpg.create_pool(
+                user=user, password=password, database=database,
+                host=host, port=port,
+            )
+            logging.info("Database pool created on attempt %d", attempt + 1)
+            return
+        except Exception as exc:
+            logging.warning("DB connection attempt %d failed: %s", attempt + 1, exc)
+            await asyncio.sleep(2)
+    raise RuntimeError("Failed to connect to database after 30 attempts")
 
 
 @app.on_event("startup")
