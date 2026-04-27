@@ -5,9 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/inference_service/ ./services/inference_service/
-COPY services/drift_detection/ ./drift_detection/
-COPY shared/ ./shared/
+COPY . .
 
 ENV PYTHONPATH=/app
 
