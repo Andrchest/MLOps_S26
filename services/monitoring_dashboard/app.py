@@ -1,0 +1,116 @@
+from datetime import datetime
+
+import streamlit as st
+
+from dashboard_pages.datasets import render_datasets_page
+from dashboard_pages.deployments import render_deployments_page
+from dashboard_pages.inference import render_inference_page
+from dashboard_pages.jobs import render_jobs_page
+from dashboard_pages.models import render_models_page
+from dashboard_pages.monitoring import render_monitoring_page
+from dashboard_pages.overview import render_overview_page
+from dashboard_pages.system_health import render_system_health_page
+from db import check_db_health
+from ui import apply_global_styles, render_login, render_sidebar
+
+
+st.set_page_config(
+    page_title="Monitoring Dashboard",
+    page_icon="assets/innopolis-logo.svg",
+    layout="wide",
+)
+
+apply_global_styles()
+
+
+# ----------------------
+# Mock Authentication
+# ----------------------
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+
+if not st.session_state.authenticated:
+    username, password, login_clicked = render_login()
+
+    if login_clicked:
+        if username == "admin" and password == "admin123":
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+    st.stop()
+
+
+# ----------------------
+# Dashboard Shell
+# ----------------------
+page = render_sidebar()
+
+
+# ----------------------
+# Top Bar
+# ----------------------
+left_col, right_col = st.columns([0.88, 0.12])
+
+with left_col:
+    st.title("Monitoring Dashboard")
+    st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+with right_col:
+    action_cols = st.columns([1, 1])
+
+    with action_cols[0]:
+        if st.button("↻", key="page_refresh", help="Refresh"):
+            st.rerun()
+
+    with action_cols[1]:
+        with st.popover("⋮"):
+            st.markdown("**Account**")
+            st.caption(st.session_state.get("username", "admin"))
+
+            if st.button("Logout", use_container_width=True):
+                st.session_state.authenticated = False
+                st.rerun()
+
+
+# ----------------------
+# DB Health Check
+# ----------------------
+db_ok, db_error = check_db_health()
+
+if not db_ok:
+    st.error(f"Database unavailable: {db_error}")
+    st.info("The dashboard is running, but DB-backed data cannot be loaded.")
+    st.stop()
+
+
+# ----------------------
+# Router
+# ----------------------
+if page == "System Overview":
+    render_overview_page()
+
+elif page == "Jobs":
+    render_jobs_page()
+
+elif page == "Datasets":
+    render_datasets_page()
+
+elif page == "Models":
+    render_models_page()
+
+elif page == "Deployments":
+    render_deployments_page()
+
+elif page == "Inference":
+    render_inference_page()
+
+elif page == "Monitoring":
+    render_monitoring_page()
+
+elif page == "System Health":
+    render_system_health_page()

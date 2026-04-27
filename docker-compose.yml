@@ -128,7 +128,7 @@ services:
           cpus: "0.25"
 
   monitoring-service:
-    build: ./services/monitoring-service
+    build: ./services/monitoring_service
     env_file: .env
     ports:
       - "8002:8002"
@@ -141,7 +141,7 @@ services:
           cpus: "0.25"
 
   monitoring-dashboard:
-    build: ./services/monitoring-dashboard
+    build: ./services/monitoring_dashboard
     env_file: .env
     ports:
       - "8501:8501"
