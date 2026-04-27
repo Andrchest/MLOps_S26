@@ -1,0 +1,8 @@
+preprocess:
+  input: pipelines/first_ml_baseline/data/breast_cancer.csv
+  output: artifacts/dvc/processed/breast_cancer.csv
+  target_column: target
+
+train:
+  artifacts_dir: artifacts/dvc/model
+  target_column: target

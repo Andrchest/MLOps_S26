@@ -1,8 +1,7 @@
 """Simple baseline training script for tabular binary classification.
 
 Usage:
-    python pipelines/first_ml_baseline/train.py \
-    --data pipelines/first_ml_baseline/data/breast_cancer.csv
+    python pipelines/first_ml_baseline/train.py --data pipelines/first_ml_baseline/data/breast_cancer.csv
 """
 
 import argparse
@@ -19,6 +18,11 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+
+try:
+    from drift_detection.service import build_reference_profile
+except ModuleNotFoundError:
+    from services.drift_detection.service import build_reference_profile
 
 RANDOM_STATE = 42
 DEFAULT_TARGET_COLUMN = "target"
@@ -46,6 +50,11 @@ def parse_args() -> argparse.Namespace:
         help=f"MLflow experiment name. Default: {DEFAULT_MLFLOW_EXPERIMENT}",
     )
     parser.add_argument("--job_id", required=True, help="ID of the running process.")
+    parser.add_argument(
+        "--artifacts-dir",
+        default=str(DEFAULT_ARTIFACTS_DIR),
+        help=f"Directory for local artifacts. Default: {DEFAULT_ARTIFACTS_DIR}",
+    )
     return parser.parse_args()
 
 
@@ -118,24 +127,32 @@ def calculate_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict[str, float]:
 
 
 def save_artifacts(
-    model: Pipeline, metrics: dict[str, float], artifacts_dir: Path
-) -> tuple[Path, Path]:
+    model: Pipeline,
+    metrics: dict[str, float],
+    reference_profile: dict[str, object],
+    artifacts_dir: Path,
+) -> tuple[Path, Path, Path]:
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = artifacts_dir / "model.joblib"
     metrics_path = artifacts_dir / "metrics.json"
+    reference_profile_path = artifacts_dir / "reference_profile.json"
 
     joblib.dump(model, model_path)
 
     with metrics_path.open("w", encoding="utf-8") as file:
         json.dump(metrics, file, indent=2)
 
-    return model_path, metrics_path
+    with reference_profile_path.open("w", encoding="utf-8") as file:
+        json.dump(reference_profile, file, indent=2)
+
+    return model_path, metrics_path, reference_profile_path
 
 
 def log_to_mlflow(
     model: Pipeline,
     metrics: dict[str, float],
+    reference_profile: dict[str, object],
     data_path: str,
     target_column: str,
     experiment_name: str,
@@ -157,6 +174,7 @@ def log_to_mlflow(
             mlflow.log_param(f"model__{param_name}", param_value)
 
         mlflow.log_metrics(metrics)
+        mlflow.log_dict(reference_profile, "reference_profile.json")
         mlflow.sklearn.log_model(model, artifact_path="model")
 
         return run.info.run_id
@@ -166,6 +184,7 @@ def main() -> None:
     args = parse_args()
     df = load_csv(args.data)
     X, y = prepare_features_and_target(df, args.target)
+    reference_profile = build_reference_profile(X)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -178,14 +197,16 @@ def main() -> None:
     model = train_model(X_train, y_train)
     y_pred = model.predict(X_test)
     metrics = calculate_metrics(y_test, y_pred)
-    model_path, metrics_path = save_artifacts(
+    model_path, metrics_path, reference_profile_path = save_artifacts(
         model=model,
         metrics=metrics,
-        artifacts_dir=DEFAULT_ARTIFACTS_DIR,
+        reference_profile=reference_profile,
+        artifacts_dir=Path(args.artifacts_dir),
     )
     run_id = log_to_mlflow(
         model=model,
         metrics=metrics,
+        reference_profile=reference_profile,
         data_path=args.data,
         target_column=args.target,
         experiment_name=args.mlflow_experiment,
@@ -195,6 +216,7 @@ def main() -> None:
     print("Training completed successfully.")
     print(f"Model saved to: {model_path}")
     print(f"Metrics saved to: {metrics_path}")
+    print(f"Reference profile saved to: {reference_profile_path}")
     print(f"MLflow run logged successfully: {run_id}")
     print("Metrics:")
     for metric_name, metric_value in metrics.items():

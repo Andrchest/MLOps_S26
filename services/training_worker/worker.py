@@ -1,28 +1,35 @@
 import asyncio
-import subprocess
-import mlflow
+import json
 import os
-from mlflow.tracking import MlflowClient
-from services.training_worker.db import (
-    get_job,
-    recover_stuck_jobs,
-    update_status,
-    save_trained_model,
-    JobStatus,
-)
-from services.training_worker.minio_client import (
-    download_dataset,
-    save_model_to_minio,
-)
-from services.training_worker.retry import (
-    sync_retry,
-    async_retry,
-)
+import subprocess
+import tempfile
 
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 5))
-TMP_DIR = os.getenv("TMP_DIR", "/tmp")
-TRAINING_SCRIPT = os.getenv("TRAINING_SCRIPT", "pipelines/first_ml_baseline/train.py")
-TIMEOUT = int(os.getenv("TRAINING_TIMEOUT", 300))
+import mlflow
+from mlflow.tracking import MlflowClient
+
+try:
+    from db import (
+        get_job,
+        save_trained_model,
+        update_status,
+    )
+    from minio_client import (
+        download_dataset,
+        save_model_to_minio,
+    )
+except ModuleNotFoundError:
+    from .db import (
+        get_job,
+        save_trained_model,
+        update_status,
+    )
+    from .minio_client import (
+        download_dataset,
+        save_model_to_minio,
+    )
+
+POLL_INTERVAL = 5
+TMP_ROOT = os.getenv("WORKER_TMP_DIR", tempfile.gettempdir())
 
 
 async def worker_loop():
@@ -31,10 +38,6 @@ async def worker_loop():
 
     logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
     logging.info("WORKER LOOP STARTED")
-
-    # Updates status for "running" jobs
-    await recover_stuck_jobs()
-
     while True:
         try:
             job = await get_job()
@@ -49,6 +52,8 @@ async def worker_loop():
 
 
 async def process_job(job):
+    import logging
+
     job_id = job["job_id"]
     dataset_name = job["dataset_name"]
     dataset_id = job["dataset_id"]
@@ -57,35 +62,32 @@ async def process_job(job):
 
     try:
         log.info(f"Processing job {job_id}: downloading dataset {dataset_name}")
-        data_path = os.path.join(TMP_DIR, dataset_name)
-        os.makedirs("/tmp", exist_ok=True)
-
+        dataset_object_name = job.get("dataset_path") or dataset_name
+        local_file_name = os.path.basename(dataset_object_name)
+        data_path = os.path.join(TMP_ROOT, local_file_name)
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
         log.info(f"Downloading to {data_path}")
-        sync_retry(download_dataset, dataset_name=dataset_name, file_path=data_path)
+        download_dataset(dataset_object_name, data_path)
         log.info(f"Dataset downloaded to {data_path}")
-
-        csv_path = f"{data_path}.csv"
-        # Adds .csv to the dataset name
-        shutil.move(data_path, csv_path)
+        csv_path = data_path if data_path.endswith(".csv") else f"{data_path}.csv"
+        if csv_path != data_path:
+            shutil.move(data_path, csv_path)
         log.info(f"Moved to {csv_path}")
-        # Own try/except for subprocess
-        try:
-            result = subprocess.run(
-                [
-                    "python",
-                    TRAINING_SCRIPT,
-                    "--data",
-                    csv_path,
-                    "--job_id",
-                    str(job_id),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=TIMEOUT,
-            )
-        except subprocess.TimeoutExpired:
-            raise Exception("Training timeout")
-
+        artifacts_dir = os.path.join(TMP_ROOT, f"training_artifacts_{job_id}")
+        result = subprocess.run(
+            [
+                "python",
+                "pipelines/first_ml_baseline/train.py",
+                "--data",
+                csv_path,
+                "--job_id",
+                str(job_id),
+                "--artifacts-dir",
+                artifacts_dir,
+            ],
+            capture_output=True,
+            text=True,
+        )
         log.info(
             f"Pipeline stdout: {result.stdout[:500] if result.stdout else 'empty'}"
         )
@@ -98,7 +100,7 @@ async def process_job(job):
         client = MlflowClient()
 
         # Here we find the experiment by job_id and the latest job
-        experiment_name = os.getenv("MLFLOW_EXPERIMENT", "first_ml_baseline")
+        experiment_name = "first_ml_baseline"
         exp = mlflow.get_experiment_by_name(experiment_name)
 
         runs = client.search_runs(
@@ -115,12 +117,17 @@ async def process_job(job):
         run = runs[0]
         run_id = run.info.run_id
 
-        params = run.data.params
+        params = dict(run.data.params)
         metrics = run.data.metrics
         model_name = run.data.params["model_type"]
+        reference_profile_path = os.path.join(artifacts_dir, "reference_profile.json")
+        if os.path.exists(reference_profile_path):
+            with open(reference_profile_path, "r", encoding="utf-8") as file:
+                params["reference_profile"] = json.load(file)
 
-        # Model is already saved locally by the training pipeline
-        local_model_path = "artifacts"
+        local_model_path = mlflow.artifacts.download_artifacts(
+            artifact_uri=f"runs:/{run_id}/model"
+        )
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"
@@ -128,18 +135,16 @@ async def process_job(job):
 
         # Update status to mark the code part of saving model artifacts
         log.info("Updating status to persisting")
-        await async_retry(update_status, job_id, JobStatus.PERSISTING)
+        await update_status(job_id, "persisting")
         log.info("Downloading artifacts from MLflow")
 
-        model_path = sync_retry(
-            save_model_to_minio,
+        model_path = save_model_to_minio(
             local_model_path=local_model_path,
             model_name=model_name,
             model_version=model_version,
         )
 
-        await async_retry(
-            save_trained_model,
+        await save_trained_model(
             job_id=job_id,
             model_name=model_name,
             model_version=model_version,
@@ -148,14 +153,14 @@ async def process_job(job):
             parameters=params,
         )
 
-        await async_retry(update_status, job_id, JobStatus.SUCCEEDED)
+        await update_status(job_id, "succeeded")
 
     except Exception as e:
         import logging
 
         logging.error(f"Error processing job {job_id}: {e}", exc_info=True)
         try:
-            await async_retry(update_status, job_id, JobStatus.FAILED)
+            await update_status(job_id, "failed")
         except Exception as update_err:
             logging.error(f"Failed to update status: {update_err}")
         # DO NOT re-raise the exception. Let the worker continue to the next job.

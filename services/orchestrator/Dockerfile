@@ -2,13 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY services/orchestrator/requirements.txt /app/requirements.txt
+COPY services/orchestrator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY services/orchestrator/ ./services/orchestrator/
-COPY shared/ ./shared/
-COPY pipelines/ ./pipelines/
+COPY services/orchestrator/ .
+COPY services/drift_detection/ ./drift_detection/
 
-ENV PYTHONPATH=/app
-
-CMD ["uvicorn", "services.orchestrator.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
