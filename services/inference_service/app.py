@@ -48,14 +48,26 @@ async def lifespan(app: FastAPI):
     global model_executor, DB_POOL
     setup_logging("inference-service")
 
-    # Initialize DB pool for model context and retraining
-    DB_POOL = await asyncpg.create_pool(
-        user=os.getenv("POSTGRES_USER", "mlops"),
-        password=os.getenv("POSTGRES_PASSWORD", "mlops"),
-        database=os.getenv("POSTGRES_DB", "mlops"),
-        host=os.getenv("POSTGRES_HOST", "postgres"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-    )
+    # Initialize DB pool for model context and retraining (with retries)
+    db_host = os.getenv("POSTGRES_HOST", "postgres")
+    db_port = int(os.getenv("POSTGRES_PORT", "5432"))
+    db_user = os.getenv("POSTGRES_USER", "mlops")
+    db_password = os.getenv("POSTGRES_PASSWORD", "mlops")
+    db_name = os.getenv("POSTGRES_DB", "mlops")
+
+    for attempt in range(30):
+        try:
+            DB_POOL = await asyncpg.create_pool(
+                user=db_user, password=db_password, database=db_name,
+                host=db_host, port=db_port,
+            )
+            logger.info("DB pool created on attempt %d", attempt + 1)
+            break
+        except Exception as exc:
+            logger.warning("DB connection attempt %d failed: %s", attempt + 1, exc)
+            await asyncio.sleep(2)
+    else:
+        raise RuntimeError("Failed to connect to database after 30 attempts")
 
     # Initialize Process Pool for CPU-bound scikit-learn work
     workers = 4
