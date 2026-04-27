@@ -9,7 +9,7 @@ from db import get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8000")
 
 SERVICES = {
     "orchestrator": os.getenv(
