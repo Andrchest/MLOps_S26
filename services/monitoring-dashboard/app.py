@@ -11,29 +11,29 @@ from dashboard_pages.monitoring import render_monitoring_page
 from dashboard_pages.overview import render_overview_page
 from dashboard_pages.system_health import render_system_health_page
 from db import check_db_health
-from ui import apply_global_styles, render_sidebar
+from ui import apply_global_styles, render_login, render_sidebar
 
 
 st.set_page_config(
     page_title="Monitoring Dashboard",
-    page_icon="assets/innopolis-logo.png",
+    page_icon="assets/innopolis-logo.svg",
     layout="wide",
 )
 
 apply_global_styles()
 
+
+# ----------------------
+# Mock Authentication
+# ----------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 
-def login():
-    st.title("Monitoring Dashboard")
-    st.caption("Sign in to access the MLOps monitoring dashboard.")
+if not st.session_state.authenticated:
+    username, password, login_clicked = render_login()
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login", use_container_width=True):
+    if login_clicked:
         if username == "admin" and password == "admin123":
             st.session_state.authenticated = True
             st.session_state.username = username
@@ -41,26 +41,26 @@ def login():
         else:
             st.error("Invalid credentials")
 
-
-if not st.session_state.authenticated:
-    login()
     st.stop()
 
 
+# ----------------------
+# Dashboard Shell
+# ----------------------
 page = render_sidebar()
 
 
 # ----------------------
 # Top Bar
 # ----------------------
-left, right = st.columns([0.86, 0.14])
+left_col, right_col = st.columns([0.88, 0.12])
 
-with left:
+with left_col:
     st.title("Monitoring Dashboard")
     st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
     st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-with right:
+with right_col:
     action_cols = st.columns([1, 1])
 
     with action_cols[0]:
@@ -77,6 +77,9 @@ with right:
                 st.rerun()
 
 
+# ----------------------
+# DB Health Check
+# ----------------------
 db_ok, db_error = check_db_health()
 
 if not db_ok:
@@ -85,6 +88,9 @@ if not db_ok:
     st.stop()
 
 
+# ----------------------
+# Router
+# ----------------------
 if page == "System Overview":
     render_overview_page()
 

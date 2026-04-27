@@ -7,7 +7,7 @@ def apply_global_styles():
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
         html, body, [class*="css"] {{
             font-family: 'Inter', sans-serif;
@@ -16,7 +16,10 @@ def apply_global_styles():
         :root {{
             --primary: {PRIMARY_COLOR};
             --primary-hover: #379F1C;
+            --primary-active: #2E8517;
+
             --primary-soft: rgba(64,186,33,0.12);
+            --primary-soft-2: rgba(64,186,33,0.08);
             --primary-border: rgba(64,186,33,0.36);
             --primary-glow: rgba(64,186,33,0.22);
 
@@ -28,6 +31,108 @@ def apply_global_styles():
             --text-soft: #BFD6BF;
         }}
 
+        /* ----------------------
+           Global Buttons
+        ---------------------- */
+        .stButton > button {{
+            min-height: 48px;
+            border-radius: 12px;
+            font-weight: 800;
+            transition: all 0.16s ease;
+        }}
+
+        .stButton > button[kind="primary"] {{
+            background: var(--primary);
+            border: 1px solid var(--primary);
+            color: #071009;
+        }}
+
+        .stButton > button[kind="primary"]:hover {{
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            color: #071009;
+            transform: translateY(-1px);
+        }}
+
+        /* ----------------------
+           Inputs
+        ---------------------- */
+        .stTextInput {{
+            margin-bottom: 16px;
+        }}
+
+        .stTextInput input {{
+            min-height: 48px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.055);
+        }}
+
+        .stTextInput input:focus {{
+            border-color: var(--primary-border);
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }}
+
+        /* ----------------------
+           Login Page
+        ---------------------- */
+        .login-panel {{
+            width: 100%;
+            box-sizing: border-box;
+            margin: 48px 0 32px 0;
+            padding: 32px;
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at top left, rgba(64,186,33,0.16), transparent 44%),
+                linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
+            border: 1px solid rgba(64,186,33,0.18);
+            box-shadow: 0 24px 80px rgba(0,0,0,0.28);
+        }}
+
+        .login-logo-img,
+        .login-logo-fallback {{
+            width: 56px;
+            height: 56px;
+            margin-bottom: 24px;
+            border-radius: 16px;
+            object-fit: contain;
+            background: linear-gradient(135deg, var(--primary), #65D84C);
+            box-shadow: 0 16px 36px var(--primary-glow);
+        }}
+
+        .login-logo-fallback {{
+            color: #071009;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 18px;
+        }}
+
+        .login-panel h1 {{
+            margin: 0 0 8px 0;
+            color: var(--text-main);
+            font-size: 34px;
+            font-weight: 900;
+            line-height: 1.1;
+        }}
+
+        .login-panel p {{
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }}
+
+        .login-footer {{
+            margin-top: 40px;
+            color: #6F8A6F;
+            font-size: 12px;
+            text-align: center;
+        }}
+
+        /* ----------------------
+           Sidebar
+        ---------------------- */
         [data-testid="stSidebar"] {{
             background:
                 radial-gradient(circle at top left, rgba(64,186,33,0.12), transparent 34%),
@@ -89,6 +194,7 @@ def apply_global_styles():
         }}
 
         [data-testid="stSidebar"] .stButton > button {{
+            min-height: 44px;
             height: 44px;
             display: flex;
             align-items: center;
@@ -168,8 +274,11 @@ def apply_global_styles():
             line-height: 1.6;
         }}
 
-        /* Top page action buttons */
+        /* ----------------------
+           Top Page Actions
+        ---------------------- */
         div[data-testid="column"] .stButton > button {{
+            min-height: 36px;
             height: 36px;
             min-width: 36px;
             border-radius: 10px;
@@ -182,6 +291,7 @@ def apply_global_styles():
             background: var(--primary-soft);
             border-color: var(--primary-border);
         }}
+
         </style>
         """,
         unsafe_allow_html=True,

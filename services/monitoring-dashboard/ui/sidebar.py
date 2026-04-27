@@ -57,12 +57,11 @@ def init_navigation_state():
 
 def render_sidebar():
     init_navigation_state()
-
     logo_base64 = get_logo_base64(APP_LOGO_PATH)
 
     with st.sidebar:
         if logo_base64:
-            logo_html = f'<img class="logo-img" src="data:image/png;base64,{logo_base64}" />'
+            logo_html = f'<img class="logo-img" src="data:image/svg+xml;base64,{logo_base64}" />'
         else:
             logo_html = '<div class="logo-fallback">IU</div>'
 
@@ -87,13 +86,12 @@ def render_sidebar():
 
             for item in group["items"]:
                 is_active = item["key"] == st.session_state.current_page
-                button_type = "primary" if is_active else "secondary"
 
                 if st.button(
                     f'{item["icon"]}   {item["label"]}',
                     key=f"nav_{item['key']}",
                     use_container_width=True,
-                    type=button_type,
+                    type="primary" if is_active else "secondary",
                 ):
                     st.session_state.current_page = item["key"]
                     st.rerun()
