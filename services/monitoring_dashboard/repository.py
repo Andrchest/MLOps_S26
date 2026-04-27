@@ -1,11 +1,17 @@
 import logging
 import os
+import warnings
 from typing import Any
 
 import pandas as pd
 import requests
 
 from db import get_connection
+
+warnings.filterwarnings(
+    "ignore",
+    message="pandas only supports SQLAlchemy connectable",
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -18,7 +24,7 @@ SERVICES = {
     ),
     "inference": os.getenv(
         "INFERENCE_HEALTH_URL",
-        "http://inference_service:8000/health",
+        "http://inference_service:8001/health",
     ),
     "monitoring": os.getenv(
         "MONITORING_HEALTH_URL",
