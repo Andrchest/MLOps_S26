@@ -1,135 +1,264 @@
 # Demo Recording Instructions — MLOps Platform
 
-## What this demo shows
+## Demo Overview
 
-The demo demonstrates the full ML model lifecycle in a distributed platform:
-data ingestion → training → deployment → inference → drift detection → automated retraining → fault tolerance.
+This demo shows the full ML model lifecycle through web UIs:
+- Data ingestion → MinIO (object storage web UI)
+- Training → MLflow (experiment tracking UI)
+- Deployment → PostgreSQL + Streamlit (operational dashboard)
+- Inference → API docs (FastAPI Swagger)
+- Monitoring → Grafana (dashboards)
+- Drift detection → automatic retraining trigger
+
+**The key: show the browser UIs, not terminal commands.**
 
 ---
 
-## Preparation (5 minutes before recording)
+## Preparation (before recording)
 
 ### 1. Start the platform
 ```bash
 cd /home/andreipc/MLOps/MLOps_S26
 docker compose up -d
 ```
-Wait 30 seconds for all services to come up.
+Wait 30 seconds for all services to start.
 
-### 2. Verify everything works
-Open in browser:
-- **MLflow:** http://localhost:5000 — MLflow UI should load
-- **Grafana:** http://localhost:3000 (login/password: admin/admin) — dashboards
-- **Streamlit:** http://localhost:8501 — Streamlit dashboard
-- **MinIO:** http://localhost:9001 (login/password: minio/minio123) — file manager
-
-### 3. Clear the database for a clean demo
+### 2. Clear database for clean demo
 ```bash
 docker compose exec postgres psql -U mlops -d mlops -c "DELETE FROM prediction_logs; DELETE FROM deployments; DELETE FROM trained_models; DELETE FROM jobs; DELETE FROM datasets; ALTER SEQUENCE jobs_job_id_seq RESTART WITH 1; ALTER SEQUENCE datasets_dataset_id_seq RESTART WITH 1; ALTER SEQUENCE deployments_deployment_id_seq RESTART WITH 1;"
 ```
 
-### 4. Open terminal
-Open a terminal in `/home/andreipc/MLOps/MLOps_S26` — this will be the main recording window.
-
----
-
-## Recording Steps
-
-### STEP 0: Start recording
-Open your screen recording software and start recording.
-
----
-
-### STEP 1: Data Ingestion (20 seconds)
-**Terminal command:**
+### 3. IMPORTANT: Reset application code
+The running containers need updated code. Rebuild and restart:
 ```bash
-bash scripts/demo.sh data 2>&1
+docker compose build orchestrator
+docker compose restart orchestrator inference-service
+sleep 10
 ```
 
-**Show on screen:**
-- Script output: `Dataset uploaded: id=1`
-- Data is now in MinIO and PostgreSQL
+---
+
+## Recording Steps (show browser UIs)
+
+### STEP 1: Show platform overview (30 seconds)
+
+Open in browser and show each tab:
+
+1. **MinIO** — http://localhost:9001 (login: minio, password: minio123)
+   - Show the buckets: `datasets/` and `models/`
+   - These are empty initially
+
+2. **MLflow** — http://localhost:5000
+   - Show the experiments page (empty at start)
+
+3. **Grafana** — http://localhost:3000 (admin/admin)
+   - Show the dashboards: "ML Platform Overview" and "ML Monitoring"
+
+4. **Streamlit** — http://localhost:8501
+   - Show the operational dashboard with tabs
+
+Say: "This platform has 4 main web UIs: MinIO for storage, MLflow for experiments, Grafana for monitoring, Streamlit for operations."
 
 ---
 
-### STEP 2: Model Training (30-40 seconds)
-**Terminal command:**
+### STEP 2: Data Ingestion (30 seconds)
+
+**In browser — MinIO:** http://localhost:9001
+
+1. Navigate to buckets
+2. Click "Upload" — select the file `seeds/sample_dataset.csv`
+3. Show the uploaded file in the bucket
+4. Copy the path (shown in MinIO)
+
+**Then in terminal (quick, just to trigger):**
 ```bash
-bash scripts/demo.sh train 2>&1
+curl -X POST http://localhost:8000/datasets -F "file=@seeds/sample_dataset.csv" -F "name=customer_churn"
 ```
 
-**Show on screen:**
-- Job creation: `Training job created: job_id=1`
-- Status: `Training completed successfully!`
-- Training results (accuracy, metrics)
+**Back to browser:**
+
+1. **Streamlit** — http://localhost:8501 → "Datasets" tab
+   - Show the new dataset appears in the table
+
+2. **PostgreSQL** (optional, show in terminal):
+```bash
+docker compose exec postgres psql -U mlops -d mlops -c "SELECT * FROM datasets;"
+```
+Show: dataset_id=1, name=customer_churn
+
+Say: "Data is uploaded to MinIO AND registered in PostgreSQL. Dataset ID = 1."
 
 ---
 
-### STEP 3: Model Deployment (15 seconds)
-**Terminal command:**
+### STEP 3: Model Training (60 seconds)
+
+**In terminal (quick, just to trigger training):**
 ```bash
-bash scripts/demo.sh deploy 2>&1
+curl -X POST "http://localhost:8000/train?dataset_id=1&dataset_name=customer_churn"
 ```
 
-**Show on screen:**
-- Response: `{"deployment_id": 1, "status": "active", ...}`
-- Model is now available for inference
+**While training runs, SHOW IN BROWSER:**
+
+1. **MLflow** — http://localhost:5000
+   - Refresh page periodically
+   - Show new experiment appears: "customer_churn"
+   - Click on it → show parameters, metrics appearing in real-time
+
+2. **Streamlit** — http://localhost:8501 → "Jobs" tab
+   - Show job status: "running"
+
+**Wait 30-60 seconds for training to complete, then:**
+
+1. **MLflow** — refresh
+   - Show completed run with metrics (accuracy, precision, recall)
+   - Show model artifact registered
+
+2. **Streamlit** — refresh "Jobs" tab
+   - Show job status: "succeeded"
+
+3. **MinIO** — refresh bucket
+   - Show new model file in `models/LogisticRegression/`
+
+Say: "Training worker picks up the job, runs the ML pipeline, logs everything to MLflow, saves the model to MinIO."
 
 ---
 
-### STEP 4: Inference (20 seconds)
-**Terminal command:**
-```bash
-bash scripts/demo.sh infer 2>&1
-```
+### STEP 4: Model Deployment (30 seconds)
 
-**Show on screen:**
-- Prediction response: `{"prediction": {"label": 1, "score": 0.51}, "latency_ms": 3063}`
-- 5 additional predictions for metrics collection
+**In browser:**
+
+1. **Streamlit** — http://localhost:8501 → "Deployments" tab
+   - Shows empty initially
+   - Click "Deploy" button for the trained model
+   - Or use API:
+
+**In terminal (quick):**
+```bash
+curl -X POST "http://localhost:8000/promote" -H "Content-Type: application/x-www-form-urlencoded" -d "model_name=LogisticRegression&model_version=1_1_xxx"
+```
+(Replace 1_1_xxx with actual version from MLflow or jobs table)
+
+**Back to browser:**
+
+1. **Streamlit** — refresh "Deployments" tab
+   - Show: deployment_id=1, model_name, status="active"
+
+Say: "Model is promoted to production. It's now active for inference."
 
 ---
 
-### STEP 5: Drift Detection & Retraining (30 seconds)
-**Terminal command:**
-```bash
-bash scripts/demo.sh drift 2>&1
+### STEP 5: Make Predictions (30 seconds)
+
+**In browser — API docs:** http://localhost:8001/docs
+
+1. Click on `/predict` endpoint
+2. Click "Try it out"
+3. Enter model_name and model_version (from deployments)
+4. Enter JSON:
+```json
+{"age": 30, "monthly_spend": 100, "tenure_months": 24, "income": 55000, "credit_score": 700}
 ```
+5. Click "Execute"
+6. Show the response: prediction, score, latency_ms
 
-**Show on screen:**
-- Prediction with anomalous data: `{"age": 999, "monthly_spend": 99999}`
-- Response: `Drift-triggered retraining jobs found: 2|customer_churn|pending`
+**Repeat 2-3 times with different data.**
 
-**Optional — show pending jobs:**
+**Then SHOW IN BROWSER:**
+
+1. **Streamlit** — http://localhost:8501 → "Monitoring" tab
+   - Show prediction counts, success/failed distribution, latency chart
+
+2. **Grafana** — http://localhost:3000 → "ML Monitoring" dashboard
+   - Show prediction metrics, latency over time
+
+Say: "Predictions are served with latency metrics. Every request is logged and visible in monitoring dashboards."
+
+---
+
+### STEP 6: Drift Detection (45 seconds)
+
+**Send anomalous data:**
+
+**In browser — API docs:** http://localhost:8001/docs
+
+1. `/predict` endpoint again
+2. Enter extreme values:
+```json
+{"age": 999, "monthly_spend": 99999, "tenure_months": 999, "income": 999999, "credit_score": 999}
+```
+3. Execute multiple times (5-10x)
+
+**SHOW IN BROWSER:**
+
+1. **Streamlit** — http://localhost:8501 → "Jobs" tab
+   - New job appears: status="pending" (drift-triggered retraining)
+
+2. **Or in terminal:**
 ```bash
 docker compose exec postgres psql -U mlops -d mlops -c "SELECT * FROM jobs WHERE status='pending';"
 ```
+Show: new job for retraining
+
+Say: "When I send out-of-distribution data (age=999), the system detects data drift and automatically creates a retraining job. The model will be retrained on fresh data."
 
 ---
 
-### STEP 6: Fault Tolerance (30 seconds)
-**Terminal command:**
+### STEP 7: Fault Tolerance (45 seconds)
+
+**STOP a container:**
+
+**In terminal:**
 ```bash
-bash scripts/demo.sh fault 2>&1
+docker compose stop training-worker
 ```
 
-**Show on screen:**
-- Container stop: `training-worker container stopped`
-- Health check: `Inference service is still healthy despite training-worker being down`
-- Recovery: `training-worker is back up and running`
-- Final table: all services in `Up` status
+**SHOW IN BROWSER — proves system still works:**
+
+1. **API docs** — http://localhost:8001/docs
+   - Make a prediction — it still works!
+   - Show inference service is healthy despite worker being down
+
+2. **Streamlit** — refresh "Jobs" tab
+   - Existing completed jobs are still visible
+
+3. **Grafana** — http://localhost:3000
+   - Show dashboard is still updating
+
+**RESTART container:**
+
+```bash
+docker compose start training-worker
+```
+
+**SHOW:**
+
+1. **Terminal:**
+```bash
+docker compose ps
+```
+Show: training-worker is back up
+
+Say: "Even when the training worker is down, inference continues. The system is resilient to failures."
 
 ---
 
-### STEP 7: Final — Service Overview (20 seconds)
-**Terminal command:**
-```bash
-bash scripts/demo.sh all 2>&1 | tail -20
-```
+### STEP 8: Summary — Show all UIs (30 seconds)
 
-**OR show in browser:**
-1. **MLflow** (http://localhost:5000) — experiments, metrics, artifacts
-2. **Grafana** (http://localhost:3000) — monitoring dashboards
-3. **Streamlit** (http://localhost:8501) — operational dashboard
+Walk through each UI one more time:
+
+1. **MLflow** — http://localhost:5000
+   - Show experiments, artifacts
+
+2. **Grafana** — http://localhost:3000
+   - Show both dashboards
+
+3. **Streamlit** — http://localhost:8501
+   - Walk through all tabs
+
+4. **MinIO** — http://localhost:9001
+   - Show datasets bucket and models bucket
+
+Say: "Complete MLOps platform with ML lifecycle, monitoring, and fault tolerance."
 
 ---
 
@@ -138,24 +267,26 @@ bash scripts/demo.sh all 2>&1 | tail -20
 ```bash
 cd /home/andreipc/MLOps/MLOps_S26
 
-# Start the platform
+# Start platform
 docker compose up -d
 
-# Clear DB for a new demo
+# Clear database
 docker compose exec postgres psql -U mlops -d mlops -c "DELETE FROM prediction_logs; DELETE FROM deployments; DELETE FROM trained_models; DELETE FROM jobs; DELETE FROM datasets; ALTER SEQUENCE jobs_job_id_seq RESTART WITH 1; ALTER SEQUENCE datasets_dataset_id_seq RESTART WITH 1; ALTER SEQUENCE deployments_deployment_id_seq RESTART WITH 1;"
 
-# Full demo (all steps)
-bash scripts/demo.sh all
+# Rebuild with fixes
+docker compose build orchestrator
+docker compose restart orchestrator inference-service
 
-# Or step by step:
-bash scripts/demo.sh data
-bash scripts/demo.sh train
-bash scripts/demo.sh deploy
-bash scripts/demo.sh infer
-bash scripts/demo.sh drift
-bash scripts/demo.sh fault
+# Trigger demo steps
+curl -X POST http://localhost:8000/datasets -F "file=@seeds/sample_dataset.csv" -F "name=customer_churn"
+curl -X POST "http://localhost:8000/train?dataset_id=1&dataset_name=customer_churn"
+curl -X POST "http://localhost:8000/promote" -H "Content-Type: application/x-www-form-urlencoded" -d "model_name=LogisticRegression&model_version=XXX"
 
-# Stop the platform
+# Fault tolerance test
+docker compose stop training-worker
+docker compose start training-worker
+
+# Stop
 docker compose down
 ```
 
@@ -163,52 +294,54 @@ docker compose down
 
 ## Troubleshooting
 
-### Problem: "Dataset already exists"
-**Solution:** Clear the database (see Preparation step 3).
-
-### Problem: "Training failed"
-**Solution:** Check worker logs:
-```bash
-docker compose logs training-worker --tail=30
-```
-Restart the worker:
-```bash
-docker compose restart training-worker
-```
-
-### Problem: "Not Found" on deploy
-**Solution:** The model hasn't been trained yet. Run the train step first.
-
-### Problem: services won't start
-**Solution:** Full restart:
+### Problem: Services won't start
 ```bash
 docker compose down -v
 docker compose up -d --build
 sleep 30
 ```
 
+### Problem: Training fails with "NoSuchKey"
+Rebuild orchestrator with fixes:
+```bash
+docker compose build orchestrator
+docker compose restart orchestrator
+```
+
+### Problem: Can't find model version
+```bash
+docker compose exec postgres psql -U mlops -d mlops -c "SELECT model_name, model_version FROM trained_models LIMIT 1;"
+```
+
 ---
 
-## Platform Architecture (for Q&A)
+## Access Points
+
+| UI | URL | Login | Purpose |
+|---|---|---|---|
+| MLflow | http://localhost:5000 | (none) | Experiment tracking |
+| Grafana | http://localhost:3000 | admin/admin | Monitoring dashboards |
+| Streamlit | http://localhost:8501 | (none) | Operational dashboard |
+| MinIO | http://localhost:9001 | minio/minio123 | Object storage |
+| API Docs | http://localhost:8000/docs | (none) | Orchestrator API |
+| Inference API | http://localhost:8001/docs | (none) | Inference API |
+
+---
+
+## Platform Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    MLOps Platform                           │
-├─────────────┬─────────────┬─────────────┬─────────────────┤
-│ Orchestrator│ Training    │ Inference   │ Monitoring      │
-│ :8000       │ Worker      │ Service     │ Dashboards      │
-│ Job Mgmt    │ :8500       │ :8001       │ Grafana:3000    │
-│ Training    │ Training    │ Inference   │ Streamlit:8501  │
-├─────────────┴─────────────┴─────────────┴─────────────────┤
-│              Infrastructure                                 │
-│  PostgreSQL:5432  │  MinIO:9000  │  MLflow:5000           │
-│  Metadata         │  Storage     │  Experiments           │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│              Web UIs                        │
+├──────────┬──────────┬──────────┬──────────┤
+│  MLflow   │ Grafana  │ Streamlit│  MinIO   │
+│  :5000    │  :3000  │  :8501   │  :9001   │
+├──────────┴──────────┴──────────┴──────────┤
+│            Services                        │
+│  Orchestrator:8000 │ Inference:8001       │
+│  Training Worker:8500                     │
+├────────────────────────────────────────────┤
+│         Infrastructure                    │
+│  PostgreSQL:5432 │ MinIO Storage         │
+└────────────────────────────────────────────┘
 ```
-
-### Key capabilities:
-- **Data Drift** — automatic detection via statistical tests
-- **Fault Tolerance** — circuit breakers, retry logic, graceful degradation
-- **Scheduled Retraining** — background service with configurable interval
-- **Monitoring** — Prometheus metrics + Grafana dashboards + prediction logs
-- **CI/CD** — GitHub Actions with tests, linting, Docker build, Trivy
