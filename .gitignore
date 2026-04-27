@@ -20,11 +20,11 @@ models/
 .idea/
 
 data/
-!pipelines/first_ml_baseline/data/
 datasets/
 *.csv
-!pipelines/first_ml_baseline/data/breast_cancer.csv
 *.parquet
 
 .DS_Store
 Thumbs.db
+
+docker-compose.override.yml

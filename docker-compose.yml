@@ -1,7 +1,6 @@
 version: "3.9"
 
 services:
-
   postgres:
     image: postgres:15
     environment:
@@ -12,6 +11,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   minio:
     image: minio/minio
@@ -24,24 +29,42 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   mlflow:
     image: ghcr.io/mlflow/mlflow
     command: mlflow server --host 0.0.0.0 --port 5000 --disable-security-middleware
     ports:
       - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   orchestrator:
-    build:
-      context: .
-      dockerfile: services/orchestrator/Dockerfile
+    build: ./services/orchestrator
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
       - "8000:8000"
     depends_on:
       - postgres
       - mlflow
-      - minio
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   training-worker:
     build:
@@ -49,33 +72,74 @@ services:
       dockerfile: services/training_worker/Dockerfile
     env_file: .env
     environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
       MLFLOW_TRACKING_URI: "http://mlflow:5000"
     depends_on:
       - postgres
       - mlflow
       - minio
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8500/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   inference-service:
-    build:
-      context: .
-      dockerfile: services/inference-service/Dockerfile
+    build: ./services/inference-service
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
-      - "8001:8000"
+      - "8001:8001"
     depends_on:
       - mlflow
       - minio
       - postgres
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   monitoring-service:
-    build:
-      context: .
-      dockerfile: services/monitoring-service/Dockerfile
+    build: ./services/monitoring-service
     env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
     ports:
       - "8002:8002"
     depends_on:
       - postgres
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  monitoring-dashboard:
+    build:
+      context: .
+      dockerfile: services/monitoring-dashboard/Dockerfile
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: DEBUG
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
