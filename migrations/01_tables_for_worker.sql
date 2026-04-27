@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     client_id TEXT,
     dataset_path TEXT,
     dataset_name TEXT,
+    created_at TIMESTAMP DEFAULT now(),
     CONSTRAINT unique_client_id UNIQUE (client_id)
 );
 
