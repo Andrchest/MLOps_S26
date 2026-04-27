@@ -14,11 +14,11 @@ load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 def get_db_config() -> dict:
     return {
-        "host": os.getenv("POSTGRES_HOST", "localhost"),
+        "host": os.getenv("POSTGRES_HOST", "postgres"),
         "port": os.getenv("POSTGRES_PORT", "5432"),
         "dbname": os.getenv("POSTGRES_DB", "mlops"),
-        "user": os.getenv("POSTGRES_USER", "postgres"),
-        "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
+        "user": os.getenv("POSTGRES_USER", "mlops"),
+        "password": os.getenv("POSTGRES_PASSWORD", "mlops"),
     }
 
 
