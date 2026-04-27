@@ -83,7 +83,12 @@ def get_total_models():
 
 
 def get_datasets():
-    return safe_api_to_df("/datasets")
+    return safe_query_to_df("""
+        SELECT dataset_id, dataset_name, dataset_path, file_size_bytes, checksum, format, status, created_at
+        FROM datasets
+        ORDER BY created_at DESC
+        LIMIT 100
+    """)
 
 
 def get_deployments():
