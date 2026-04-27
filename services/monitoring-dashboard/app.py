@@ -1,44 +1,85 @@
+from datetime import datetime
+
 import streamlit as st
-import pandas as pd
 
+from dashboard_pages.datasets import render_datasets_page
+from dashboard_pages.deployments import render_deployments_page
+from dashboard_pages.inference import render_inference_page
+from dashboard_pages.jobs import render_jobs_page
+from dashboard_pages.models import render_models_page
+from dashboard_pages.monitoring import render_monitoring_page
+from dashboard_pages.overview import render_overview_page
+from dashboard_pages.system_health import render_system_health_page
 from db import check_db_health
-from repository import (
-    get_job_status_counts,
-    get_jobs,
-    get_models,
-    get_recent_prediction_logs,
-    get_total_jobs,
-    get_total_models,
-    get_datasets,
-    get_deployments,
-    get_latency_stats,
-    get_prediction_status_distribution,
-    get_service_health,
-    get_total_predictions,
-    get_successful_predictions,
-    get_failed_predictions,
-    get_prediction_trend,
-)
-from ui import render_table, render_metric, render_health_table
+from ui import apply_global_styles, render_login, render_sidebar
 
-st.set_page_config(page_title="Monitoring Dashboard", page_icon="📊", layout="wide")
 
-st.title("Monitoring Dashboard")
-st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
-
-page = st.sidebar.radio(
-    "Navigate",
-    [
-        "System Overview",
-        "Jobs",
-        "Datasets",
-        "Models",
-        "Deployments",
-        "Monitoring",
-        "System Health",
-    ],
+st.set_page_config(
+    page_title="Monitoring Dashboard",
+    page_icon="assets/innopolis-logo.svg",
+    layout="wide",
 )
 
+apply_global_styles()
+
+
+# ----------------------
+# Mock Authentication
+# ----------------------
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+
+if not st.session_state.authenticated:
+    username, password, login_clicked = render_login()
+
+    if login_clicked:
+        if username == "admin" and password == "admin123":
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+
+    st.stop()
+
+
+# ----------------------
+# Dashboard Shell
+# ----------------------
+page = render_sidebar()
+
+
+# ----------------------
+# Top Bar
+# ----------------------
+left_col, right_col = st.columns([0.88, 0.12])
+
+with left_col:
+    st.title("Monitoring Dashboard")
+    st.caption("Read-only dashboard for jobs, models, and overall system visibility.")
+    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+with right_col:
+    action_cols = st.columns([1, 1])
+
+    with action_cols[0]:
+        if st.button("↻", key="page_refresh", help="Refresh"):
+            st.rerun()
+
+    with action_cols[1]:
+        with st.popover("⋮"):
+            st.markdown("**Account**")
+            st.caption(st.session_state.get("username", "admin"))
+
+            if st.button("Logout", use_container_width=True):
+                st.session_state.authenticated = False
+                st.rerun()
+
+
+# ----------------------
+# DB Health Check
+# ----------------------
 db_ok, db_error = check_db_health()
 
 if not db_ok:
@@ -46,153 +87,30 @@ if not db_ok:
     st.info("The dashboard is running, but DB-backed data cannot be loaded.")
     st.stop()
 
+
+# ----------------------
+# Router
+# ----------------------
 if page == "System Overview":
-    st.header("System Overview")
-
-    jobs_total = get_total_jobs()
-    models_total = get_total_models()
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if jobs_total["ok"] and not jobs_total["data"].empty:
-            render_metric("Total Jobs", int(jobs_total["data"].iloc[0]["total_jobs"]))
-        else:
-            st.warning("Unable to load jobs total.")
-
-    with col2:
-        if models_total["ok"] and not models_total["data"].empty:
-            render_metric(
-                "Total Models",
-                int(models_total["data"].iloc[0]["total_models"]),
-            )
-        else:
-            st.warning("Unable to load models total.")
-
-    render_table(
-        get_job_status_counts(),
-        "Job Status Distribution",
-        "No jobs available.",
-    )
-
-    render_table(
-        get_recent_prediction_logs(),
-        "Recent Prediction Logs",
-        "No prediction logs available.",
-    )
+    render_overview_page()
 
 elif page == "Jobs":
-    st.header("Jobs")
-    render_table(get_jobs(), "Jobs", "No jobs found.")
+    render_jobs_page()
 
 elif page == "Datasets":
-    st.header("Datasets")
-    datasets_result = get_datasets()
-
-    if datasets_result.get("source") == "placeholder":
-        st.info(datasets_result["message"])
-        st.caption("Awaiting backend/API support for datasets listing.")
-    else:
-        render_table(datasets_result, "Datasets", "No datasets found.")
+    render_datasets_page()
 
 elif page == "Models":
-    st.header("Models")
-    render_table(get_models(), "Trained Models", "No models found.")
+    render_models_page()
 
 elif page == "Deployments":
-    st.header("Deployments")
-    deployments_result = get_deployments()
+    render_deployments_page()
 
-    if deployments_result.get("source") == "placeholder":
-        st.info(deployments_result["message"])
-        st.caption("Awaiting backend/API support for deployments listing.")
-    else:
-        render_table(deployments_result, "Deployments", "No deployments found.")
+elif page == "Inference":
+    render_inference_page()
 
 elif page == "Monitoring":
-    st.header("Monitoring")
-
-    total_predictions = get_total_predictions()
-    successful_predictions = get_successful_predictions()
-    failed_predictions = get_failed_predictions()
-    latency_stats = get_latency_stats()
-    prediction_status = get_prediction_status_distribution()
-    prediction_trend = get_prediction_trend()
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        if total_predictions["ok"] and not total_predictions["data"].empty:
-            render_metric(
-                "Total Predictions",
-                int(total_predictions["data"].iloc[0]["total_predictions"]),
-            )
-        else:
-            st.warning("N/A")
-
-    with col2:
-        if successful_predictions["ok"] and not successful_predictions["data"].empty:
-            render_metric(
-                "Successful",
-                int(successful_predictions["data"].iloc[0]["successful_predictions"]),
-            )
-        else:
-            st.warning("N/A")
-
-    with col3:
-        if failed_predictions["ok"] and not failed_predictions["data"].empty:
-            render_metric(
-                "Failed",
-                int(failed_predictions["data"].iloc[0]["failed_predictions"]),
-            )
-        else:
-            st.warning("N/A")
-
-    with col4:
-        if latency_stats["ok"] and not latency_stats["data"].empty:
-            avg_latency = latency_stats["data"].iloc[0]["avg_latency"]
-            render_metric(
-                "Avg Latency (ms)",
-                round(float(avg_latency), 2) if avg_latency is not None else "N/A",
-            )
-        else:
-            st.warning("N/A")
-
-    render_table(
-        prediction_status,
-        "Prediction Status Distribution",
-        "No prediction status data found.",
-    )
-
-    st.subheader("Predictions Over Time")
-
-    if prediction_trend["ok"]:
-        trend_df = prediction_trend["data"]
-
-        if trend_df.empty:
-            st.info("No prediction trend data found.")
-
-        elif len(trend_df) < 2:
-            st.info("Not enough data points to render a trend chart yet.")
-            st.dataframe(trend_df, use_container_width=True, hide_index=True)
-
-        else:
-            trend_df["day"] = pd.to_datetime(trend_df["day"])
-            trend_df = trend_df.sort_values("day")
-            trend_df = trend_df.set_index("day")
-
-            st.line_chart(trend_df, use_container_width=True)
-
-    else:
-        st.error(prediction_trend["error"])
-
-    render_table(
-        get_recent_prediction_logs(),
-        "Recent Prediction Logs",
-        "No prediction logs available.",
-    )
+    render_monitoring_page()
 
 elif page == "System Health":
-    st.header("System Health")
-    st.caption("Live status from service health endpoints.")
-    render_health_table(get_service_health())
+    render_system_health_page()

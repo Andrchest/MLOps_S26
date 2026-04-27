@@ -1,3 +1,5 @@
+import logging
+import os
 from typing import Any
 
 import pandas as pd
@@ -5,22 +7,46 @@ import requests
 
 from db import get_connection
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-# ----------------------
-# Core helper
-# ----------------------
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
+
+SERVICES = {
+    "orchestrator": os.getenv(
+        "ORCHESTRATOR_HEALTH_URL",
+        "http://orchestrator:8000/health",
+    ),
+    "inference": os.getenv(
+        "INFERENCE_HEALTH_URL",
+        "http://inference_service:8000/health",
+    ),
+    "monitoring": os.getenv(
+        "MONITORING_HEALTH_URL",
+        "http://monitoring-service:8002/health",
+    ),
+}
+
+
 def safe_query_to_df(query: str) -> dict[str, Any]:
     try:
         with get_connection() as conn:
             df = pd.read_sql_query(query, conn)
         return {"ok": True, "data": df, "error": None}
     except Exception as exc:
+        logging.error("Database query failed: %s", exc)
         return {"ok": False, "data": pd.DataFrame(), "error": str(exc)}
 
 
-# ----------------------
-# Jobs
-# ----------------------
+def safe_api_to_df(endpoint: str) -> dict[str, Any]:
+    try:
+        response = requests.get(f"{ORCHESTRATOR_URL}{endpoint}", timeout=3)
+        response.raise_for_status()
+        return {"ok": True, "data": pd.DataFrame(response.json()), "error": None}
+    except Exception as exc:
+        logging.error("API request failed for %s: %s", endpoint, exc)
+        return {"ok": False, "data": pd.DataFrame(), "error": str(exc)}
+
+
 def get_jobs():
     return safe_query_to_df("""
         SELECT job_id, dataset_name, dataset_id, status
@@ -43,9 +69,6 @@ def get_total_jobs():
     return safe_query_to_df("SELECT COUNT(*) AS total_jobs FROM jobs")
 
 
-# ----------------------
-# Models
-# ----------------------
 def get_models():
     return safe_query_to_df("""
         SELECT job_id, model_name, model_version, model_path, metrics, parameters
@@ -59,9 +82,14 @@ def get_total_models():
     return safe_query_to_df("SELECT COUNT(*) AS total_models FROM trained_models")
 
 
-# ----------------------
-# Prediction Logs (Monitoring)
-# ----------------------
+def get_datasets():
+    return safe_api_to_df("/datasets")
+
+
+def get_deployments():
+    return safe_api_to_df("/deployments")
+
+
 def get_recent_prediction_logs():
     return safe_query_to_df("""
         SELECT request_id, timestamp, model_version, model_name, latency_ms, status
@@ -87,59 +115,6 @@ def get_prediction_status_distribution():
         FROM prediction_logs
         GROUP BY status
     """)
-
-
-# ----------------------
-# Datasets (placeholder until backend ready)
-# ----------------------
-def get_datasets():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Datasets backend contract is pending. \
-            This page is prepared for integration.",
-    }
-
-
-# ----------------------
-# Deployments (placeholder)
-# ----------------------
-def get_deployments():
-    return {
-        "ok": True,
-        "data": pd.DataFrame(),
-        "error": None,
-        "source": "placeholder",
-        "message": "Deployments backend contract is pending. \
-            This page is prepared for integration.",
-    }
-
-
-# ----------------------
-# System Health
-# ----------------------
-SERVICES = {
-    "orchestrator": "http://localhost:8000/health",
-    "inference": "http://localhost:8001/health",
-    "monitoring": "http://localhost:8002/health",
-}
-
-
-def get_service_health():
-    results = []
-
-    for name, url in SERVICES.items():
-        try:
-            res = requests.get(url, timeout=2)
-            status = "healthy" if res.status_code == 200 else "degraded"
-        except Exception:
-            status = "down"
-
-        results.append({"service": name, "status": status})
-
-    return {"ok": True, "data": pd.DataFrame(results), "error": None}
 
 
 def get_total_predictions():
@@ -172,3 +147,19 @@ def get_prediction_trend():
         GROUP BY DATE(timestamp)
         ORDER BY day
     """)
+
+
+def get_service_health():
+    results = []
+
+    for name, url in SERVICES.items():
+        try:
+            response = requests.get(url, timeout=2)
+            status = "healthy" if response.status_code == 200 else "degraded"
+        except Exception as exc:
+            logging.error("Health check failed for %s: %s", name, exc)
+            status = "down"
+
+        results.append({"service": name, "status": status})
+
+    return {"ok": True, "data": pd.DataFrame(results), "error": None}

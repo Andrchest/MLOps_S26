@@ -1,10 +1,16 @@
+CREATE TABLE IF NOT EXISTS datasets (
+    dataset_id INT NOT NULL PRIMARY KEY,
+    dataset_name TEXT NOT NULL,
+    dataset_version TEXT NOT NULL
+);
+
+
 CREATE TABLE IF NOT EXISTS jobs (
     job_id SERIAL PRIMARY KEY,
-    dataset_name TEXT NOT NULL,
-    dataset_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT now(),
+    dataset_id INT NOT NULL REFERENCES datasets(dataset_id),
     status TEXT DEFAULT 'pending'
 );
+
 
 
 CREATE TABLE IF NOT EXISTS trained_models (
@@ -20,17 +26,18 @@ CREATE TABLE IF NOT EXISTS trained_models (
 );
 
 
-CREATE TABLE IF NOT EXISTS prediction_logs (
-    request_id TEXT PRIMARY KEY,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
-    model_version TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS prod_models (
+    model_name TEXT,
+    model_version TEXT,
+    PRIMARY KEY (model_name)
+);
+
+
+CREATE TABLE IF NOT EXISTS deployments (
+    deployment_id SERIAL PRIMARY KEY,
     model_name TEXT NOT NULL,
-    input_data JSONB NOT NULL,
-    prediction JSONB NOT NULL,
-    latency_ms DOUBLE PRECISION NOT NULL,
-    status TEXT NOT NULL,
-    dataset_name TEXT,
-    features_schema JSONB,
-    error_message TEXT,
-    prediction_type TEXT
+    model_version TEXT NOT NULL,
+    status TEXT NOT NULL, --flag for rollback
+    created_at TIMESTAMP DEFAULT now()
+
 );
