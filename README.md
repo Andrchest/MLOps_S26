@@ -1,7 +1,8 @@
 # MLOps Platform (S26)
 
-A comprehensive microservice-based platform for training, deploying, and monitoring Machine Learning models. 
-*Cool description: TBD*.
+A distributed MLOps platform supporting the full ML lifecycle: data ingestion, model training, deployment, inference serving, monitoring, and automated retraining via drift detection.
+
+**Full architecture documentation:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## Quick Start & Reproducibility
 
@@ -43,15 +44,22 @@ Once running, services are accessible at:
 The platform is built on a microservices architecture, containerized via Docker.
 
 ### Core Microservices
-* **Orchestrator (`:8000`)**: Manages and coordinates tasks between services. Depends on Postgres and MLflow. 
-* **Training Worker**: Handles background model training jobs. Connects to Postgres, MLflow, and MinIO. 
-* **Inference Service (`:8001`)**: Exposes the `/predict` endpoints for trained models. Fetches models via MLflow. 
-* **Monitoring Service (`:8002`)**: Observes prediction requests and logs them to the database for model quality analysis.
+| Service | Port | Description |
+|---------|------|-------------|
+| Orchestrator | 8000 | Dataset management, training jobs, model promotion |
+| Training Worker | 8500 | Polls for training jobs, executes ML pipelines |
+| Inference Service | 8001 | Prediction serving with drift detection |
+| Monitoring Dashboard | 8501 | Streamlit UI for system visibility |
+| Monitoring Service | 8002 | Prediction logging and analysis |
 
 ### Infrastructure & Storage
-* **PostgreSQL (`:5432`)**: Relational database for application state and prediction logs.
-* **MinIO (`:9000`, console `:9001`)**: S3-compatible object storage for datasets.
-* **MLflow (`:5000`)**: Model registry and experiment tracking.
+| Component | Port | Description |
+|-----------|------|-------------|
+| PostgreSQL | 5432 | Jobs, models, deployments, prediction logs |
+| MinIO | 9000/9001 | Object storage for datasets and models |
+| MLflow | 5000 | Experiment tracking, model registry |
+| Grafana | 3000 | Monitoring dashboards |
+| Loki | 3100 | Log aggregation |
 
 ---
 
