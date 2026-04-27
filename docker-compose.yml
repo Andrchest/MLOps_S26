@@ -110,10 +110,12 @@ services:
           cpus: "0.5"
 
   inference_service:
-    build: ./services/inference_service
+    build:
+      context: .
+      dockerfile: services/inference_service/Dockerfile
     env_file: .env
     ports:
-      - "8001:8000"
+      - "8001:8001"
     depends_on:
       - mlflow
       - minio
