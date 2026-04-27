@@ -14,13 +14,16 @@ Record your screen showing the web UIs as you walk through the ML lifecycle:
 
 ---
 
-## Before recording
+## Before recording (fresh start)
 
 ```bash
 cd /home/andreipc/MLOps/MLOps_S26
+docker compose build --no-cache
 docker compose up -d
-sleep 15
+sleep 30
 ```
+
+> **Note**: Always use `docker compose build --no-cache` for a clean build. Cached layers can cause stale service configurations.
 
 Open these tabs in browser:
 - **Streamlit:** http://localhost:8501
@@ -145,7 +148,8 @@ Show that training-worker is back to "Up" status.
 ```bash
 cd /home/andreipc/MLOps/MLOps_S26
 
-# Start
+# Start (fresh build)
+docker compose build --no-cache
 docker compose up -d
 
 # Upload dataset
@@ -183,7 +187,7 @@ docker compose down
 
 **Services won't start:**
 ```bash
-docker compose down -v && docker compose up -d --build && sleep 30
+docker compose down -v && docker compose build --no-cache && docker compose up -d && sleep 30
 ```
 
 **Training fails:**
