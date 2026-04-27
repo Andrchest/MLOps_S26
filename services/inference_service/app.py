@@ -1,20 +1,32 @@
 from fastapi import FastAPI, HTTPException, status
 import asyncio
+import json
+import os
 from contextlib import asynccontextmanager
 from concurrent.futures import ProcessPoolExecutor
-from services.inference_service.schemas import InputData, Prediction, PredictResponse
 from datetime import datetime
+import asyncpg
+
+from services.inference_service.schemas import InputData, Prediction, PredictResponse
 from services.inference_service.predictor import Predictor
 from services.inference_service.load_model import (
     fetch_model_with_retry,
     _MODEL_BYTES_CACHE,
 )
-import os
 import logging
 from shared.utils.logging_utils import setup_logging
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
+try:
+    from drift_detection.service import analyze_drift, build_drift_visualization
+except ModuleNotFoundError:
+    from services.drift_detection.service import analyze_drift, build_drift_visualization
+
 reload_lock = asyncio.Lock()
+
+DB_POOL = None
+DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "2.0"))
+LATEST_DRIFT_RESULTS: dict[str, dict] = {}
 
 
 logger = logging.getLogger(__name__)
@@ -31,8 +43,17 @@ def _run_prediction(model_bytes: bytes, input_dict: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model_executor
+    global model_executor, DB_POOL
     setup_logging("inference-service")
+
+    # Initialize DB pool for model context and retraining
+    DB_POOL = await asyncpg.create_pool(
+        user=os.getenv("POSTGRES_USER", "mlops"),
+        password=os.getenv("POSTGRES_PASSWORD", "mlops"),
+        database=os.getenv("POSTGRES_DB", "mlops"),
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+    )
 
     # Initialize Process Pool for CPU-bound scikit-learn work
     workers = 4
@@ -46,7 +67,103 @@ async def lifespan(app: FastAPI):
 
     logger.info("Application shutting down", extra={"event": "shutdown"})
     model_executor.shutdown(wait=True)
+    await DB_POOL.close()
     logger.info("Executor shut down complete")
+
+
+async def get_model_context(model_name: str, model_version: str) -> dict | None:
+    if DB_POOL is None:
+        return None
+    query = """
+    SELECT tm.parameters, j.dataset_id, j.dataset_name, j.dataset_path
+    FROM trained_models tm
+    JOIN jobs j ON j.job_id = tm.job_id
+    WHERE tm.model_name = $1 AND tm.model_version = $2
+    ORDER BY tm.created_at DESC NULLS LAST, tm.job_id DESC
+    LIMIT 1
+    """
+    try:
+        async with DB_POOL.acquire() as conn:
+            row = await conn.fetchrow(query, model_name, model_version)
+    except Exception as exc:
+        logger.warning("Failed to fetch model context: %s", exc)
+        return None
+
+    if row is None:
+        return None
+
+    parameters = row["parameters"]
+    if isinstance(parameters, str):
+        parameters = json.loads(parameters)
+
+    return {
+        "dataset_id": row["dataset_id"],
+        "dataset_name": row["dataset_name"],
+        "dataset_path": row["dataset_path"],
+        "parameters": parameters or {},
+    }
+
+
+async def create_retraining_job(dataset_name: str, dataset_id: int, dataset_path: str = None) -> int | None:
+    query_active = """
+    SELECT job_id FROM jobs
+    WHERE dataset_name = $1 AND dataset_id = $2
+    AND status IN ('pending', 'running', 'persisting')
+    ORDER BY job_id DESC LIMIT 1
+    """
+    query_insert = """
+    INSERT INTO jobs (dataset_name, dataset_id, dataset_path, status)
+    VALUES ($1, $2, $3, 'pending')
+    RETURNING job_id
+    """
+    try:
+        async with DB_POOL.acquire() as conn:
+            active_job = await conn.fetchval(query_active, dataset_name, dataset_id)
+            if active_job:
+                return None
+            return await conn.fetchval(query_insert, dataset_name, dataset_id, dataset_path)
+    except Exception as exc:
+        logger.warning("Failed to create retraining job: %s", exc)
+        return None
+
+
+async def evaluate_drift(request_id: str, model_name: str, model_version: str, input_data: InputData) -> None:
+    model_context = await get_model_context(model_name, model_version)
+    if not model_context:
+        return
+
+    reference_profile = model_context["parameters"].get("reference_profile")
+    if not reference_profile:
+        return
+
+    drift_result = analyze_drift(
+        reference_profile,
+        [input_data.model_dump()],
+        threshold=DRIFT_THRESHOLD,
+    )
+
+    retraining_job_id = None
+    if drift_result["drift_detected"]:
+        retraining_job_id = await create_retraining_job(
+            model_context["dataset_name"],
+            model_context["dataset_id"],
+            model_context.get("dataset_path"),
+        )
+        logger.warning(
+            "Drift detected for %s:%s score=%.4f retraining_job_id=%s",
+            model_name, model_version, drift_result["drift_score"], retraining_job_id,
+        )
+
+    result = build_drift_visualization(drift_result)
+    result["request_id"] = request_id
+    result["model_name"] = model_name
+    result["model_version"] = model_version
+    result["dataset_name"] = model_context["dataset_name"]
+    result["retraining_job_id"] = retraining_job_id
+    result["timestamp"] = datetime.now().isoformat()
+
+    cache_key = f"{model_name}:{model_version}"
+    LATEST_DRIFT_RESULTS[cache_key] = result
 
 
 app = FastAPI(lifespan=lifespan)
@@ -205,4 +322,23 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
         extra={"event": "prediction_completed", **response.model_dump(mode="json")},
     )
 
+    # Evaluate drift in background (non-blocking)
+    asyncio.create_task(
+        evaluate_drift(
+            request_id=response.request_id,
+            model_name=model_name,
+            model_version=model_version,
+            input_data=input_data,
+        )
+    )
+
     return response
+
+
+@app.get("/drift/visualization")
+async def get_drift_visualization(model_name: str, model_version: str):
+    cache_key = f"{model_name}:{model_version}"
+    payload = LATEST_DRIFT_RESULTS.get(cache_key)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Drift result not found.")
+    return payload
