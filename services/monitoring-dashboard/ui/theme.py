@@ -454,6 +454,96 @@ def apply_global_styles():
             border-color: var(--primary-border);
         }}
 
+        .empty-state-card {{
+            padding: 40px;
+            text-align: center;
+        }}
+
+        .empty-state-icon {{
+            color: var(--primary);
+            font-size: 32px;
+            margin-bottom: 16px;
+        }}
+
+        .empty-state-title {{
+            color: var(--text-main);
+            font-size: 20px;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }}
+
+        .empty-state-text {{
+            color: var(--text-muted);
+            font-size: 14px;
+        }}
+
+        .detail-card {{
+            padding: 24px;
+        }}
+
+        .detail-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 24px;
+        }}
+
+        .status-pill {{
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: var(--primary-soft);
+            border: 1px solid var(--primary-border);
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 800;
+        }}
+
+        .detail-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+        }}
+
+        .detail-item {{
+            padding: 16px;
+            border-radius: 16px;
+            background: var(--surface-soft);
+            border: 1px solid var(--card-border);
+        }}
+
+        .detail-label {{
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }}
+
+        .detail-value {{
+            color: var(--text-main);
+            font-size: 16px;
+            font-weight: 900;
+        }}
+
+        .path-card {{
+            margin-top: 16px;
+            padding: 16px;
+            border-radius: 16px;
+            background: var(--surface-soft);
+            border: 1px solid var(--card-border);
+        }}
+
+        .path-value {{
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 700;
+            word-break: break-all;
+            line-height: 1.6;
+            font-family: monospace;
+        }}
+
         </style>
         """,
         unsafe_allow_html=True,
