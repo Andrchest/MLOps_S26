@@ -114,3 +114,71 @@ Run the Pytest suite via:
 ```bash
 make test
 ```
+
+---
+
+## Demo Script
+
+A complete end-to-end demo script is available at `scripts/demo.sh`. It demonstrates the full ML lifecycle:
+
+```bash
+# Run the entire demo
+bash scripts/demo.sh all
+
+# Or run individual steps
+bash scripts/demo.sh data     # Step 1: Data ingestion
+bash scripts/demo.sh train    # Step 2: Model training
+bash scripts/demo.sh deploy   # Step 3: Model deployment
+bash scripts/demo.sh infer    # Step 4: Inference
+bash scripts/demo.sh drift    # Step 5: Drift detection & retraining
+bash scripts/demo.sh fault    # Step 6: Fault tolerance (stop/restart container)
+```
+
+### What the demo shows:
+1. **Data Ingestion** — Upload CSV to MinIO + PostgreSQL
+2. **Training** — Create job, worker polls and executes pipeline, saves to MLflow + MinIO
+3. **Deployment** — Promote trained model to production
+4. **Inference** — Serve predictions with latency metrics
+5. **Drift Detection** — Send out-of-distribution data, verify retraining job is auto-created
+6. **Fault Tolerance** — Stop a container, verify other services continue working, restart
+
+### Manual demo flow:
+```bash
+# 1. Start platform
+make up
+
+# 2. Upload dataset
+curl -X POST http://localhost:8000/datasets \
+  -F "file=@seeds/sample_dataset.csv" \
+  -F "name=customer_churn"
+
+# 3. Start training (replace DATASET_ID with returned id)
+curl -X POST "http://localhost:8000/train?dataset_id=1&dataset_name=customer_churn"
+
+# 4. Deploy (replace MODEL_NAME and MODEL_VERSION)
+curl -X POST "http://localhost:8000/promote" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "model_name=LogisticRegression&model_version=1_1_xxx"
+
+# 5. Make predictions
+curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=1_1_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"age":30,"monthly_spend":100,"tenure_months":24,"income":55000,"credit_score":700}'
+
+# 6. Trigger drift (extreme values)
+curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=1_1_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"age":999,"monthly_spend":99999,"tenure_months":999,"income":999999,"credit_score":999}'
+
+# 7. Fault tolerance
+docker compose stop training-worker
+docker compose start training-worker
+```
+
+### Access points during demo:
+| Interface | URL | What to show |
+|-----------|-----|-------------|
+| MLflow | http://localhost:5000 | Experiment tracking, model artifacts |
+| Grafana | http://localhost:3000 (admin/admin) | Real-time monitoring dashboards |
+| Streamlit | http://localhost:8501 | Operational dashboard (jobs, models, deployments) |
+| MinIO | http://localhost:9001 (minio/minio123) | Object storage for datasets and models |

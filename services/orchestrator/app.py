@@ -61,6 +61,16 @@ async def train(dataset_name: str, dataset_id: int, dataset_path: str = None):
     if db_pool is None:
         raise HTTPException(status_code=503, detail="Database is not available.")
 
+    # Look up dataset_path from datasets table if not provided
+    if not dataset_path:
+        async with db_pool.acquire() as conn:
+            dataset_row = await conn.fetchrow(
+                "SELECT dataset_path FROM datasets WHERE dataset_id = $1",
+                dataset_id,
+            )
+            if dataset_row and dataset_row["dataset_path"]:
+                dataset_path = dataset_row["dataset_path"]
+
     async with db_pool.acquire() as conn:
         job_id = await conn.fetchval(
             """
@@ -147,7 +157,7 @@ async def upload_and_register_dataset(
         raise HTTPException(status_code=400, detail="Uploaded dataset is empty.")
 
     try:
-        return register_uploaded_dataset(
+        record = register_uploaded_dataset(
             filename=file.filename,
             payload=payload,
             content_type=file.content_type or "text/csv",
@@ -158,6 +168,30 @@ async def upload_and_register_dataset(
             status_code=503,
             detail=f"Failed to upload dataset to object storage: {exc}",
         ) from exc
+
+    # Persist to database
+    if db_pool is not None:
+        try:
+            await db_pool.execute(
+                """
+                INSERT INTO datasets (dataset_id, dataset_name, dataset_path, file_size_bytes, checksum, format)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (dataset_id) DO NOTHING
+                """,
+                record.dataset_id,
+                record.name,
+                record.path,
+                len(payload),
+                record.checksum,
+                record.format,
+            )
+            logging.info("Dataset %s persisted to DB (id=%s)", record.name, record.dataset_id)
+        except Exception as db_exc:
+            logging.warning("Failed to persist dataset to DB: %s", db_exc)
+    else:
+        logging.warning("db_pool is None, skipping dataset persistence")
+
+    return record
 
 
 @app.get("/datasets/{dataset_id}", response_model=DatasetRecord)

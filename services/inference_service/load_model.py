@@ -1,16 +1,36 @@
 from cachetools import LRUCache
 import asyncio
+import logging
 from services.inference_service.minio_client import get_model_from_minio
+from services.inference_service.circuit_breaker import registry
 from tenacity import retry, stop_after_attempt, wait_exponential
 from minio.error import S3Error
+
+logger = logging.getLogger(__name__)
 
 # Initialize an LRU Cache with a max number of items
 _MODEL_BYTES_CACHE = LRUCache(maxsize=10)
 
+# Circuit breaker for MinIO connectivity
+_minio_cb = registry.get_or_create(
+    name="minio",
+    failure_threshold=5,
+    recovery_timeout=30.0,
+    success_threshold=3,
+)
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=6))
+
 async def fetch_model_with_retry(model_name, model_version):
-    return await fetch_model_bytes(model_name, model_version)
+    return await _minio_cb.call(fetch_model_bytes, model_name, model_version)
+
+
+async def get_minio_circuit_state():
+    return {
+        "name": "minio",
+        "state": _minio_cb.state.value,
+        "failure_count": _minio_cb._failure_count,
+        "available": _minio_cb.is_available,
+    }
 
 
 async def fetch_model_bytes(model_name: str, model_version: str):

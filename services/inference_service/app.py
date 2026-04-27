@@ -12,7 +12,9 @@ from services.inference_service.predictor import Predictor
 from services.inference_service.load_model import (
     fetch_model_with_retry,
     _MODEL_BYTES_CACHE,
+    get_minio_circuit_state,
 )
+from services.inference_service.circuit_breaker import registry
 import logging
 from shared.utils.logging_utils import setup_logging
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
@@ -173,9 +175,22 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health():
+async def health():
     logger.debug("Health check requested", extra={"event": "health_check"})
-    return {"status": "ok"}
+
+    minio_state = await get_minio_circuit_state()
+    db_available = True
+    try:
+        async with DB_POOL.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception:
+        db_available = False
+
+    return {
+        "status": "ok" if minio_state["available"] and db_available else "degraded",
+        "minio_circuit": minio_state,
+        "db": "connected" if db_available else "unavailable",
+    }
 
 
 @app.post("/reload")
@@ -259,7 +274,24 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
             )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
         except Exception as e:
-            # Connection failure or MinIO timeout (Infrastructure Error)
+            # Connection failure, MinIO timeout, or circuit breaker open
+            from services.inference_service.circuit_breaker import CircuitBreakerError
+
+            if isinstance(e, CircuitBreakerError):
+                logger.warning(
+                    "Circuit breaker open for %s - returning 503",
+                    e.service,
+                    extra={
+                        "request_id": request_id,
+                        "model_name": model_name,
+                        "event": "circuit_breaker_open",
+                        "circuit_state": e.state.value,
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Model service temporarily unavailable (circuit breaker: {e.state.value}).",
+                )
             logger.error(
                 f"Infrastructure error (MinIO) while fetching {model_name}",
                 extra={

@@ -170,6 +170,23 @@ services:
       - loki
     restart: unless-stopped
 
+  scheduled_retraining:
+    build:
+      context: .
+      dockerfile: services/scheduled_retraining/Dockerfile
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=mlops
+      - POSTGRES_PASSWORD=mlops
+      - POSTGRES_DB=mlops
+      - ORCHESTRATOR_URL=http://orchestrator:8000
+      - RETRAIN_INTERVAL_HOURS=24
+    depends_on:
+      - postgres
+      - orchestrator
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:
