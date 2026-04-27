@@ -59,10 +59,20 @@ services:
       "
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow
-    command: mlflow server --host 0.0.0.0 --port 5000 --disable-security-middleware
+    image: ghcr.io/mlflow/mlflow:latest
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlruns/mlflow.db
+      --default-artifact-root /mlruns
+      --host 0.0.0.0
+      --port 5000
+      --disable-security-middleware
     ports:
       - "5000:5000"
+    volumes:
+      - mlflow_data:/mlruns
+    environment:
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     deploy:
       resources:
         limits:
@@ -156,3 +166,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  mlflow_data:
