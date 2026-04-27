@@ -43,7 +43,7 @@ async def get_job():
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING job_id, dataset_name, dataset_id
+            RETURNING job_id, dataset_name, dataset_id, dataset_path
             """)
 
 

@@ -125,7 +125,7 @@ def compute_checksum(payload: bytes) -> str:
 
 def build_object_name(filename: str, checksum: str) -> str:
     stem = Path(filename).stem or "dataset"
-    return f"datasets/{stem}/{checksum}.csv"
+    return f"{stem}/{checksum}.csv"
 
 
 dataset_registry = DatasetRegistry()

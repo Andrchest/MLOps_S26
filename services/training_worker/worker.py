@@ -87,6 +87,7 @@ async def process_job(job):
             ],
             capture_output=True,
             text=True,
+            env={**os.environ, "PYTHONPATH": "/app"},
         )
         log.info(
             f"Pipeline stdout: {result.stdout[:500] if result.stdout else 'empty'}"
@@ -105,10 +106,10 @@ async def process_job(job):
 
         runs = client.search_runs(
             experiment_ids=[exp.experiment_id],
-            filter_string=f"tags.job_id = '{job_id}'",
-            max_results=1,
+            max_results=100,
             order_by=["attributes.start_time DESC"],
         )
+        runs = [r for r in runs if r.data.tags.get("job_id") == str(job_id)]
 
         if not runs:
             raise Exception("MLflow run not found for job_id")
@@ -125,9 +126,7 @@ async def process_job(job):
             with open(reference_profile_path, "r", encoding="utf-8") as file:
                 params["reference_profile"] = json.load(file)
 
-        local_model_path = mlflow.artifacts.download_artifacts(
-            artifact_uri=f"runs:/{run_id}/model"
-        )
+        local_model_path = os.path.join(artifacts_dir, "model.joblib")
 
         # Model version creating
         model_version = f"{job_id}_{dataset_id}_{run_id}"

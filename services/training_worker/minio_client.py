@@ -77,29 +77,31 @@ def save_model_to_minio(local_model_path, model_name, model_version):
         "object_path": object_path,
     }
 
-    # Try different possible file names
-    possible_files = ["model.pkl", "model.joblib", "model"]
-    file_path = None
-    for fname in possible_files:
-        test_path = os.path.join(local_model_path, fname)
-        if os.path.exists(test_path):
-            file_path = test_path
-            break
+    # Handle both file and directory paths
+    if os.path.isfile(local_model_path):
+        file_path = local_model_path
+    else:
+        possible_files = ["model.pkl", "model.joblib", "model"]
+        file_path = None
+        for fname in possible_files:
+            test_path = os.path.join(local_model_path, fname)
+            if os.path.exists(test_path):
+                file_path = test_path
+                break
 
-    if not file_path:
-        # List what's in the directory
-        files_in_dir = (
-            os.listdir(local_model_path) if os.path.exists(local_model_path) else []
-        )
-        logger.error(
-            "Model file not found",
-            extra={
-                "event": "model_file_missing",
-                "found_files": files_in_dir,
-                **context,
-            },
-        )
-        raise FileNotFoundError(f"Model file not found in {local_model_path}")
+        if not file_path:
+            files_in_dir = (
+                os.listdir(local_model_path) if os.path.exists(local_model_path) else []
+            )
+            logger.error(
+                "Model file not found",
+                extra={
+                    "event": "model_file_missing",
+                    "found_files": files_in_dir,
+                    **context,
+                },
+            )
+            raise FileNotFoundError(f"Model file not found in {local_model_path}")
 
     logger.info(
         "Saving model to MinIO",
