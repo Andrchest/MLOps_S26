@@ -4,6 +4,11 @@
 # Default: runs from step0
 
 STEP=${1:-step0}
+
+# Ensure we're in the right directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 ORCH="http://localhost:8000"
 INFERENCE="http://localhost:8001"
 STREAMLIT="http://localhost:8501"
@@ -11,13 +16,13 @@ MLFLOW="http://localhost:5000"
 MINIO="http://localhost:9001"
 
 get_latest_model_version() {
-    docker compose exec postgres psql -U mlops -d mlops -t -c \
-        "SELECT model_version FROM trained_models ORDER BY created_at DESC LIMIT 1;" | tr -d ' '
+    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+        "SELECT model_version FROM trained_models ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n'
 }
 
 get_deployed_model_version() {
-    docker compose exec postgres psql -U mlops -d mlops -t -c \
-        "SELECT model_version FROM deployments WHERE status='active' ORDER BY deployed_at DESC LIMIT 1;" | tr -d ' '
+    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+        "SELECT model_version FROM deployments WHERE status='active' ORDER BY deployed_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n'
 }
 
 wait_for_services() {
