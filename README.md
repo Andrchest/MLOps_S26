@@ -13,7 +13,6 @@ A distributed MLOps platform supporting the full ML lifecycle: data ingestion, m
 - [Environment Setup](#environment-setup)
 - [Services & Ports](#services--ports)
 - [Documentation](#documentation)
-- [Demo](#demo)
 - [API Reference](#api-reference)
 - [Development](#development)
 - [Troubleshooting](#troubleshooting)
@@ -22,33 +21,7 @@ A distributed MLOps platform supporting the full ML lifecycle: data ingestion, m
 
 ## Overview
 
-The platform consists of **9 services** orchestrated via Docker Compose:
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Inference   │────▶│  MinIO       │     │  PostgreSQL     │
-│  Service     │     │  (9000/9001) │     │  (5432)         │
-│  (8001)      │     └──────────────┘     └────────┬────────┘
-└─────────────┘                                   │
-       │                                          ▼
-       │                                    ┌──────────┐
-       │                                    │  MLflow  │
-       │                                    │  (5000)  │
-       │                                    └──────────┘
-       │
-       ▼
-┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Training    │◀────│  Orchestrator│─────▶│  Monitoring     │
-│  Worker      │     │  (8000)      │     │  Dashboard      │
-│  (8500)      │     └──────────────┘     │  (8501)         │
-└─────────────┘                           └─────────────────┘
-                                               ▲
-                                         ┌──────────┐
-                                         │Monitoring│
-                                         │ Service  │
-                                         │ (8002)   │
-                                         └──────────┘
-```
+The platform consists of **9 services** orchestrated via Docker Compose, supporting the full ML lifecycle from data ingestion to automated retraining.
 
 **Key features:**
 - **Automated drift detection** — inference service evaluates data drift in real-time
@@ -94,15 +67,7 @@ curl http://localhost:8002/health   # Monitoring
 
 All should return `{"status":"ok"}`.
 
-### 4. Run the Demo
-
-```bash
-bash scripts/demo.sh all
-```
-
-Or run individual steps: `bash scripts/demo.sh step1`, `bash scripts/demo.sh step2`, etc.
-
-### 5. Stop
+### 4. Stop
 
 ```bash
 make down
@@ -198,7 +163,9 @@ Services communicate using these hostnames:
 | [`DEMO_INSTRUCTIONS.md`](./DEMO_INSTRUCTIONS.md) | Step-by-step recording guide |
 | [`docs/drift_detection.md`](./docs/drift_detection.md) | Drift detection algorithm & configuration |
 | [`docs/logs_contract.md`](./docs/logs_contract.md) | Prediction logging contract & schema |
-| [`services/*/README.md`](./services/) | Per-service documentation |
+| [`services/inference_service/README.md`](./services/inference_service/README.md) | Inference service docs |
+| [`services/monitoring_dashboard/README.md`](./services/monitoring_dashboard/README.md) | Monitoring dashboard docs |
+| [`services/training_worker/DESCRIPTION.md`](./services/training_worker/DESCRIPTION.md) | Training worker docs |
 | [`tests/README.md`](./tests/README.md) | Testing guide |
 
 ### Live API Documentation
@@ -217,74 +184,6 @@ Both use **Swagger UI** (FastAPI). Click "Try it out" to test endpoints interact
 | MLflow | http://localhost:5000 | — |
 | MinIO Console | http://localhost:9001 | minio / minio123 |
 | Streamlit Dashboard | http://localhost:8501 | admin / admin123 |
-
----
-
-## Demo
-
-### Automated Demo Script
-
-```bash
-# Run everything
-bash scripts/demo.sh all
-
-# Run from specific step
-bash scripts/demo.sh step0    # Verify services + data ingestion
-bash scripts/demo.sh step1    # Data ingestion
-bash scripts/demo.sh step2    # Model training
-bash scripts/demo.sh step3    # Model deployment
-bash scripts/demo.sh step4    # Inference
-bash scripts/demo.sh step5    # Drift detection & retraining
-bash scripts/demo.sh step6    # Fault tolerance & crash recovery
-```
-
-### What Each Step Shows
-
-| Step | Feature | What to demonstrate |
-|---|---|---|
-| **1** | Data Ingestion | CSV → MinIO + DB registration |
-| **2** | Training | Job creation → worker execution → MLflow logging |
-| **3** | Deployment | Promote model → active deployment |
-| **4** | Inference | Predictions with latency metrics |
-| **5** | Drift Detection | Extreme values → drift score → automatic retraining |
-| **6** | Fault Tolerance | Kill worker → inference survives → crash recovery |
-
-### Manual Demo Flow
-
-```bash
-# 1. Upload dataset
-curl -X POST http://localhost:8000/datasets \
-  -F "file=@seeds/sample_dataset.csv" \
-  -F "name=customer_churn"
-
-# 2. Start training
-curl -X POST "http://localhost:8000/train?dataset_id=1&dataset_name=customer_churn"
-
-# 3. Deploy (get version from trained_models)
-LATEST_VER=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
-  "SELECT model_version FROM trained_models ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
-
-curl -X POST "http://localhost:8000/promote" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "model_name=LogisticRegression&model_version=$LATEST_VER"
-
-# 4. Make predictions
-curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=$LATEST_VER" \
-  -H "Content-Type: application/json" \
-  -d '{"age":30,"monthly_spend":100,"tenure_months":24,"income":55000,"credit_score":700}'
-
-# 5. Trigger drift (extreme values)
-curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=$LATEST_VER" \
-  -H "Content-Type: application/json" \
-  -d '{"age":999,"monthly_spend":99999,"tenure_months":999,"income":999999,"credit_score":999}'
-
-# 6. Check drift logs
-docker compose logs inference_service --tail=20 | grep drift
-
-# 7. Fault tolerance
-docker compose kill training-worker
-docker compose up -d training-worker
-```
 
 ---
 
@@ -432,14 +331,13 @@ make up
 ├── pipelines/               # ML training pipelines
 │   └── first_ml_baseline/   # Baseline training pipeline
 ├── scripts/                 # Utility scripts
-│   └── demo.sh              # End-to-end demo script
 ├── seeds/                   # Sample datasets
 │   └── sample_dataset.csv   # Customer churn dataset
 ├── services/                # Microservice source code
 │   ├── orchestrator/        # Dataset, job, model management
 │   ├── inference_service/   # Prediction serving + drift detection
 │   ├── monitoring-service/  # Monitoring API
-│   ├── monitoring-dashboard/# Streamlit UI
+│   ├── monitoring-dashboard/  # Streamlit UI
 │   ├── training_worker/     # Training job executor
 │   └── mlflow/              # Custom MLflow Dockerfile
 ├── shared/                  # Shared utilities (logging, etc.)
@@ -459,4 +357,4 @@ make up
 
 ## License
 
-This project is part of the MLOps course (S26) at [Innopolis University](https://www.innopolis.ru).
+This project is part of the MLOps course (S26) at [Innopolis University](https://innopolis.university/).
