@@ -4,181 +4,459 @@ A distributed MLOps platform supporting the full ML lifecycle: data ingestion, m
 
 **Full architecture documentation:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 
-## Quick Start & Reproducibility
+---
 
-### 1. Prerequisites
-* Docker & Docker Compose
-* Python 3.10+
-* Make
+## Table of Contents
 
-### 2. Initial Setup
-Run the setup command to automatically create your local `.env` file and install Git pre-commit hooks.
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Environment Setup](#environment-setup)
+- [Services & Ports](#services--ports)
+- [Documentation](#documentation)
+- [Demo](#demo)
+- [API Reference](#api-reference)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+The platform consists of **9 services** orchestrated via Docker Compose:
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Inference   │────▶│  MinIO       │     │  PostgreSQL     │
+│  Service     │     │  (9000/9001) │     │  (5432)         │
+│  (8001)      │     └──────────────┘     └────────┬────────┘
+└─────────────┘                                   │
+       │                                          ▼
+       │                                    ┌──────────┐
+       │                                    │  MLflow  │
+       │                                    │  (5000)  │
+       │                                    └──────────┘
+       │
+       ▼
+┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Training    │◀────│  Orchestrator│─────▶│  Monitoring     │
+│  Worker      │     │  (8000)      │     │  Dashboard      │
+│  (8500)      │     └──────────────┘     │  (8501)         │
+└─────────────┘                           └─────────────────┘
+                                               ▲
+                                         ┌──────────┐
+                                         │Monitoring│
+                                         │ Service  │
+                                         │ (8002)   │
+                                         └──────────┘
+```
+
+**Key features:**
+- **Automated drift detection** — inference service evaluates data drift in real-time
+- **Automatic retraining** — drift triggers a new training job
+- **Model versioning** — MLflow tracks experiments, metrics, and artifacts
+- **Fault tolerance** — interrupted training jobs recover when worker restarts
+- **Monitoring dashboard** — Streamlit UI for system visibility
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Docker & Docker Compose** (v2+)
+- **Python 3.10+** (for local development, linting, testing)
+- **Make** (for convenience commands)
+
+### 1. Clone & Setup
+
 ```bash
+cd MLOps_S26
 make setup
 ```
 
-### 3. Launch the Platform
-Build and start all microservices in detached mode:
+This creates a `.env` file from `.env.example` and installs pre-commit hooks.
+
+### 2. Build & Start
+
 ```bash
 make up
 ```
 
-### 4. Verify Services
-Once running, services are accessible at:
-* **MLflow UI:** `http://localhost:5000`
-* **MinIO Console:** `http://localhost:9001` (Credentials in `.env`)
-* **Orchestrator API:** `http://localhost:8000`
-* **Inference API:** `http://localhost:8001`
-* **Monitoring API:** `http://localhost:8002`
+Wait ~30 seconds for all services to initialize.
 
----
+### 3. Verify
 
-## Useful Commands
-* `make logs` — Tail logs from all running Docker containers.
-* `make down` — Stop and remove all containers.
-* `make restart` — Tear down, rebuild, and restart the project.
-
----
-
-## System Architecture & Services
-The platform is built on a microservices architecture, containerized via Docker.
-
-### Core Microservices
-| Service | Port | Description |
-|---------|------|-------------|
-| Orchestrator | 8000 | Dataset management, training jobs, model promotion |
-| Training Worker | 8500 | Polls for training jobs, executes ML pipelines |
-| Inference Service | 8001 | Prediction serving with drift detection |
-| Monitoring Dashboard | 8501 | Streamlit UI for system visibility |
-| Monitoring Service | 8002 | Prediction logging and analysis |
-
-### Infrastructure & Storage
-| Component | Port | Description |
-|-----------|------|-------------|
-| PostgreSQL | 5432 | Jobs, models, deployments, prediction logs |
-| MinIO | 9000/9001 | Object storage for datasets and models |
-| MLflow | 5000 | Experiment tracking, model registry |
-| Grafana | 3000 | Monitoring dashboards |
-| Loki | 3100 | Log aggregation |
-
----
-
-## Project Structure
-```text
-├── .github/                 # CI/CD pipelines and developer tooling
-├── docs/                    # System documentation
-├── experiments/             # Jupyter notebooks and EDA
-├── infra/docker/            # Dockerfiles and infrastructure configs
-├── pipelines/               # Data and ML pipelines
-├── services/                # Source code for all microservices
-├── shared/                  # Shared code/utilities across services
-└── tests/                   # Pytest test suites
+```bash
+curl http://localhost:8000/health   # Orchestrator
+curl http://localhost:8001/health   # Inference
+curl http://localhost:8002/health   # Monitoring
 ```
+
+All should return `{"status":"ok"}`.
+
+### 4. Run the Demo
+
+```bash
+bash scripts/demo.sh all
+```
+
+Or run individual steps: `bash scripts/demo.sh step1`, `bash scripts/demo.sh step2`, etc.
+
+### 5. Stop
+
+```bash
+make down
+```
+
+---
+
+## Environment Setup
+
+### .env File
+
+Copy and customize:
+
+```bash
+cp .env.example .env
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `POSTGRES_USER` | `mlops` | Database username |
+| `POSTGRES_PASSWORD` | `mlops` | Database password |
+| `POSTGRES_DB` | `mlops` | Database name |
+| `POSTGRES_HOST` | `postgres` | Database hostname (Docker service name) |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `MINIO_ROOT_USER` | `minio` | MinIO admin username |
+| `MINIO_ROOT_PASSWORD` | `minio123` | MinIO admin password |
+| `MINIO_ENDPOINT` | `minio:9000` | MinIO internal endpoint |
+| `MINIO_BUCKET` | `datasets` | Default MinIO bucket |
+| `MLFLOW_TRACKING_URI` | `http://mlflow:5000` | MLflow tracking server |
+| `ORCHESTRATOR_PORT` | `8000` | Orchestrator external port |
+| `INFERENCE_PORT` | `8001` | Inference service external port |
+| `MONITORING_PORT` | `8002` | Monitoring service external port |
+| `WORKER_POLL_INTERVAL` | `5` | Training worker poll interval (seconds) |
+| `LOG_LEVEL` | `DEBUG` | Log level for all services |
+| `PYTHONUNBUFFERED` | `1` | Disable Python output buffering |
+
+### Local Python Environment (Optional)
+
+For local development (linting, testing, running scripts):
+
+```bash
+pip install -r services/orchestrator/requirements.txt
+pip install -r services/inference_service/requirements.txt
+pip install -r services/monitoring_service/requirements.txt
+pip install pre-commit pytest
+pre-commit install
+```
+
+---
+
+## Services & Ports
+
+### External Ports (Host → Container)
+
+| Service | Port | Protocol | Description |
+|---|---|---|---|
+| **Orchestrator** | `8000` | HTTP | REST API (docs at `/docs`) |
+| **Inference Service** | `8001` | HTTP | Prediction API (docs at `/docs`) |
+| **Monitoring Service** | `8002` | HTTP | Health check, metrics API |
+| **MLflow** | `5000` | HTTP | Experiment tracking UI |
+| **MinIO API** | `9000` | HTTP | S3-compatible storage API |
+| **MinIO Console** | `9001` | HTTP | Web UI (minio / minio123) |
+| **Streamlit Dashboard** | `8501` | HTTP | Monitoring UI (admin / admin123) |
+| **PostgreSQL** | `5432` | TCP | Metadata database |
+
+> **Note:** PostgreSQL and MinIO internal ports are only accessible within the Docker network.
+
+### Internal Service Names (Docker Compose)
+
+Services communicate using these hostnames:
+
+| Service | Hostname |
+|---|---|
+| PostgreSQL | `postgres` |
+| MinIO | `minio` |
+| MLflow | `mlflow` |
+| Orchestrator | `orchestrator` |
+| Inference | `inference_service` |
+| Monitoring | `monitoring-service` |
+| Training Worker | `training-worker` |
 
 ---
 
 ## Documentation
 
-Detailed documentation, architecture decisions, and service contracts are kept in the [`docs/`](./docs) directory.
+### In-Repository Documentation
 
-**Key Documents:**
-* **[Monitoring & Logging Contract](./docs/logs_contract.md):** Specifies the required payload and database schema for logging prediction requests (Sprint 1).
-* **[Drift Detection Guide](./docs/drift_detection.md):** Explains the simple drift check and retraining trigger.
-* **[DVC Guide](./docs/dvc.md):** Explains the DVC pipeline and MinIO remote.
-* *(More links in future)*
+| Location | Content |
+|---|---|
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Full system architecture, data flow, schema |
+| [`DEMO_INSTRUCTIONS.md`](./DEMO_INSTRUCTIONS.md) | Step-by-step recording guide |
+| [`docs/drift_detection.md`](./docs/drift_detection.md) | Drift detection algorithm & configuration |
+| [`docs/logs_contract.md`](./docs/logs_contract.md) | Prediction logging contract & schema |
+| [`services/*/README.md`](./services/) | Per-service documentation |
+| [`tests/README.md`](./tests/README.md) | Testing guide |
 
----
+### Live API Documentation
 
-## Development Guide & Standards
+| Service | URL |
+|---|---|
+| Orchestrator | http://localhost:8000/docs |
+| Inference Service | http://localhost:8001/docs |
 
-We strictly enforce code quality and security standards using `pre-commit` hooks.
+Both use **Swagger UI** (FastAPI). Click "Try it out" to test endpoints interactively.
 
-### Formatting & Linting
-* Code is formatted using **Black** (Max line length: 88).
-* Linting is handled by **Flake8**. 
-* **Manual run:** `make lint`
+### Web Interfaces
 
-### Commit Standards
-This project follows [Conventional Commits](https://www.conventionalcommits.org/). Commit messages are automatically verified using `commitizen` on the `commit-msg` stage.
-* *Example:* `feat: add new inference model` or `chore: add .dockerignore and secrets protection`
-
-### Security & Secrets Management
-We use Yelp's `detect-secrets` to prevent accidental credential leaks. The baseline of known/false-positive secrets is stored in `.secrets.baseline`.
-* If you legitimately need to add a safe hash/secret, update the baseline:
-  ```bash
-  make update-baseline
-  ```
-
-### Testing
-Run the Pytest suite via:
-```bash
-make test
-```
+| Interface | URL | Credentials |
+|---|---|---|
+| MLflow | http://localhost:5000 | — |
+| MinIO Console | http://localhost:9001 | minio / minio123 |
+| Streamlit Dashboard | http://localhost:8501 | admin / admin123 |
 
 ---
 
-## Demo Script
+## Demo
 
-A complete end-to-end demo script is available at `scripts/demo.sh`. It demonstrates the full ML lifecycle:
+### Automated Demo Script
 
 ```bash
-# Run the entire demo
+# Run everything
 bash scripts/demo.sh all
 
-# Or run individual steps
-bash scripts/demo.sh data     # Step 1: Data ingestion
-bash scripts/demo.sh train    # Step 2: Model training
-bash scripts/demo.sh deploy   # Step 3: Model deployment
-bash scripts/demo.sh infer    # Step 4: Inference
-bash scripts/demo.sh drift    # Step 5: Drift detection & retraining
-bash scripts/demo.sh fault    # Step 6: Fault tolerance (stop/restart container)
+# Run from specific step
+bash scripts/demo.sh step0    # Verify services + data ingestion
+bash scripts/demo.sh step1    # Data ingestion
+bash scripts/demo.sh step2    # Model training
+bash scripts/demo.sh step3    # Model deployment
+bash scripts/demo.sh step4    # Inference
+bash scripts/demo.sh step5    # Drift detection & retraining
+bash scripts/demo.sh step6    # Fault tolerance & crash recovery
 ```
 
-### What the demo shows:
-1. **Data Ingestion** — Upload CSV to MinIO + PostgreSQL
-2. **Training** — Create job, worker polls and executes pipeline, saves to MLflow + MinIO
-3. **Deployment** — Promote trained model to production
-4. **Inference** — Serve predictions with latency metrics
-5. **Drift Detection** — Send out-of-distribution data, verify retraining job is auto-created
-6. **Fault Tolerance** — Stop a container, verify other services continue working, restart
+### What Each Step Shows
 
-### Manual demo flow:
+| Step | Feature | What to demonstrate |
+|---|---|---|
+| **1** | Data Ingestion | CSV → MinIO + DB registration |
+| **2** | Training | Job creation → worker execution → MLflow logging |
+| **3** | Deployment | Promote model → active deployment |
+| **4** | Inference | Predictions with latency metrics |
+| **5** | Drift Detection | Extreme values → drift score → automatic retraining |
+| **6** | Fault Tolerance | Kill worker → inference survives → crash recovery |
+
+### Manual Demo Flow
+
 ```bash
-# 1. Start platform
-make up
-
-# 2. Upload dataset
+# 1. Upload dataset
 curl -X POST http://localhost:8000/datasets \
   -F "file=@seeds/sample_dataset.csv" \
   -F "name=customer_churn"
 
-# 3. Start training (replace DATASET_ID with returned id)
+# 2. Start training
 curl -X POST "http://localhost:8000/train?dataset_id=1&dataset_name=customer_churn"
 
-# 4. Deploy (replace MODEL_NAME and MODEL_VERSION)
+# 3. Deploy (get version from trained_models)
+LATEST_VER=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+  "SELECT model_version FROM trained_models ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
+
 curl -X POST "http://localhost:8000/promote" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "model_name=LogisticRegression&model_version=1_1_xxx"
+  -d "model_name=LogisticRegression&model_version=$LATEST_VER"
 
-# 5. Make predictions
-curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=1_1_xxx" \
+# 4. Make predictions
+curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=$LATEST_VER" \
   -H "Content-Type: application/json" \
   -d '{"age":30,"monthly_spend":100,"tenure_months":24,"income":55000,"credit_score":700}'
 
-# 6. Trigger drift (extreme values)
-curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=1_1_xxx" \
+# 5. Trigger drift (extreme values)
+curl -X POST "http://localhost:8001/predict?model_name=LogisticRegression&model_version=$LATEST_VER" \
   -H "Content-Type: application/json" \
   -d '{"age":999,"monthly_spend":99999,"tenure_months":999,"income":999999,"credit_score":999}'
 
+# 6. Check drift logs
+docker compose logs inference_service --tail=20 | grep drift
+
 # 7. Fault tolerance
-docker compose stop training-worker
-docker compose start training-worker
+docker compose kill training-worker
+docker compose up -d training-worker
 ```
 
-### Access points during demo:
-| Interface | URL | What to show |
-|-----------|-----|-------------|
-| MLflow | http://localhost:5000 | Experiment tracking, model artifacts |
-| Grafana | http://localhost:3000 (admin/admin) | Real-time monitoring dashboards |
-| Streamlit | http://localhost:8501 | Operational dashboard (jobs, models, deployments) |
-| MinIO | http://localhost:9001 (minio/minio123) | Object storage for datasets and models |
+---
+
+## API Reference
+
+### Orchestrator (Port 8000)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/datasets` | Upload dataset (multipart/form-data) |
+| `GET` | `/datasets/{id}` | Get dataset info |
+| `POST` | `/train` | Create training job |
+| `GET` | `/jobs` | List all jobs |
+| `GET` | `/jobs/{id}` | Get job status |
+| `GET` | `/models` | List trained models |
+| `GET` | `/deployments` | List deployments |
+| `POST` | `/promote` | Promote model to production |
+| `GET` | `/health` | Health check |
+
+### Inference Service (Port 8001)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/predict` | Make prediction |
+| `GET` | `/health` | Health check |
+
+### Monitoring Service (Port 8002)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+
+---
+
+## Development
+
+### Code Quality
+
+```bash
+make lint          # Run pre-commit hooks (Black, Flake8)
+make test          # Run all tests
+make test-unit     # Unit tests only
+make test-integration  # Integration tests only
+```
+
+### Commit Standards
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add drift detection
+fix: recover orphan training jobs
+docs: update demo instructions
+chore: remove obsolete files
+```
+
+### Secrets Management
+
+```bash
+make update-baseline    # Update detect-secrets baseline
+```
+
+### Docker Operations
+
+```bash
+make up                    # Build and start all services
+make down                  # Stop and remove containers
+make restart               # Tear down, rebuild, restart
+make restart-service service=orchestrator  # Restart single service
+make logs                  # Tail all logs
+make logs-service service=training-worker  # Tail single service
+make clean                 # Remove containers, volumes, unused images
+```
+
+---
+
+## Troubleshooting
+
+### Services won't start
+
+```bash
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+sleep 30
+```
+
+### Training fails
+
+```bash
+docker compose logs training-worker --tail=50
+```
+
+Common causes:
+- Dataset not uploaded yet
+- MinIO connection issue
+- MLflow not ready
+
+### Can't find model version
+
+```bash
+docker compose exec -T postgres psql -U mlops -d mlops -c \
+  "SELECT model_name, model_version, created_at FROM trained_models ORDER BY created_at DESC LIMIT 5;"
+```
+
+### Drift not triggering
+
+```bash
+# Check drift detection logs
+docker compose logs inference_service --tail=50 | grep -E "drift|Drift"
+
+# Check if retraining job was created
+docker compose exec -T postgres psql -U mlops -d mlops -c \
+  "SELECT job_id, status, dataset_name FROM jobs ORDER BY job_id DESC LIMIT 5;"
+```
+
+### Port conflicts
+
+If a port is already in use:
+1. Update the port mapping in `.env` (e.g., `ORCHESTRATOR_PORT=8000`)
+2. Update the corresponding mapping in `docker-compose.yml`
+3. Restart: `make restart`
+
+### Reset everything
+
+```bash
+make clean
+make setup
+make up
+```
+
+---
+
+## Project Structure
+
+```
+├── .github/                 # CI/CD, PR templates
+├── .pytest_cache/           # Test cache (gitignored)
+├── docs/                    # System documentation
+│   ├── drift_detection.md   # Drift detection algorithm
+│   └── logs_contract.md     # Prediction logging contract
+├── experiments/             # Jupyter notebooks, EDA
+├── infra/                   # Dockerfiles, infrastructure configs
+├── migrations/              # Database schema migrations
+├── pipelines/               # ML training pipelines
+│   └── first_ml_baseline/   # Baseline training pipeline
+├── scripts/                 # Utility scripts
+│   └── demo.sh              # End-to-end demo script
+├── seeds/                   # Sample datasets
+│   └── sample_dataset.csv   # Customer churn dataset
+├── services/                # Microservice source code
+│   ├── orchestrator/        # Dataset, job, model management
+│   ├── inference_service/   # Prediction serving + drift detection
+│   ├── monitoring-service/  # Monitoring API
+│   ├── monitoring-dashboard/# Streamlit UI
+│   ├── training_worker/     # Training job executor
+│   └── mlflow/              # Custom MLflow Dockerfile
+├── shared/                  # Shared utilities (logging, etc.)
+├── tests/                   # Test suites
+│   ├── unit/                # Component tests
+│   └── integration/         # End-to-end tests
+├── .env.example             # Environment template
+├── .secrets.baseline        # Secrets scan baseline
+├── docker-compose.yml       # Service orchestration
+├── Makefile                 # Convenience commands
+├── DEMO_INSTRUCTIONS.md     # Demo recording guide
+├── ARCHITECTURE.md          # Full architecture docs
+└── README.md                # This file
+```
+
+---
+
+## License
+
+This project is part of the MLOps course (S26) at [Innopolis University](https://www.innopolis.ru).
