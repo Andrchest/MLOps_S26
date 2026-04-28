@@ -1,4 +1,4 @@
-.PHONY: setup update-baseline up down logs restart lint test test-unit test-integration docker-build docker-logs clean help
+.PHONY: setup update-baseline up down logs restart lint test test-unit test-integration test-services docker-build docker-build-service docker-logs docker-logs-service clean help restart-service logs-service
 
 # === Developer Setup ===
 setup:
