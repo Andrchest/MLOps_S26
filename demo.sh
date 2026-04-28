@@ -172,66 +172,66 @@ run_step6() {
     echo "STEP 6: Fault Tolerance & Crash Recovery"
     echo "=========================================="
     echo ""
-    echo "Гипотеза: Система устойчива к сбоям — inference работает при падении worker,"
-    echo "и interrupted training jobs восстанавливаются после перезапуска worker."
+    echo "Hypothesis: The system is resilient to failures — inference continues when the worker crashes,"
+    echo "and interrupted training jobs recover automatically when the worker restarts."
     echo ""
     
     MODEL_VER=$(get_deployed_model_version)
     
-    echo "--- ЧАСТЬ 1: Inference продолжает работать когда worker упал ---"
+    echo "--- PART 1: Inference survives worker crash ---"
     echo ""
-    echo "1. Базовое предсказание (worker работает)..."
+    echo "1. Baseline prediction (worker is running)..."
     RESULT=$(curl -s -X POST "$INFERENCE/predict?model_name=LogisticRegression&model_version=$MODEL_VER" \
         -H "Content-Type: application/json" \
         -d '{"age": 30, "monthly_spend": 100, "tenure_months": 24, "income": 55000, "credit_score": 700}')
     echo "$RESULT" | python3 -m json.tool | grep -E '"latency_ms"|"status"'
     echo ""
     
-    echo "2. Симулируем crash: kill training worker..."
+    echo "2. Simulate crash: kill training worker..."
     docker compose kill training-worker
-    echo "Worker killed (симуляция crash)."
+    echo "Worker killed (simulating crash)."
     echo ""
     
-    echo "3. Inference с 'упавшим' worker..."
+    echo "3. Inference with 'crashed' worker..."
     RESULT=$(curl -s -X POST "$INFERENCE/predict?model_name=LogisticRegression&model_version=$MODEL_VER" \
         -H "Content-Type: application/json" \
         -d '{"age": 35, "monthly_spend": 150, "tenure_months": 12, "income": 60000, "credit_score": 720}')
     echo "$RESULT" | python3 -m json.tool | grep -E '"latency_ms"|"status"'
     echo ""
     
-    echo "--- ЧАСТЬ 2: Crash Recovery — interrupted training job ---"
+    echo "--- PART 2: Crash Recovery — interrupted training job ---"
     echo ""
-    echo "4. Запуск нового обучения (будем убивать worker во время training)..."
+    echo "4. Starting new training (will kill worker during training)..."
     RESPONSE=$(curl -s -X POST "$ORCH/train?dataset_id=1&dataset_name=customer_churn")
     JOB_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['job_id'])")
     echo "Job создан: job_id=$JOB_ID"
     echo ""
     
-    echo "5. Ждём пока worker начнёт обучение (Phase 1: 3 сек)..."
+    echo "5. Waiting for worker to start training (Phase 1: 3s)..."
     sleep 5
     echo ""
     
-    echo "6. КРИТИЧЕСКИЙ МОМЕНТ: kill worker ВО ВРЕМЯ обучения..."
+    echo "6. CRITICAL: kill worker DURING training..."
     docker compose kill training-worker
-    echo "Worker убит во время Phase 1/2/3."
+    echo "Worker killed during Phase 1/2/3."
     echo ""
     
-    echo "7. Состояние job после crash:"
+    echo "7. Job status after crash:"
     docker compose exec -T postgres psql -U mlops -d mlops -t -c \
         "SELECT job_id, status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null
     echo ""
     
-    echo "8. Перезапуск worker (симуляция auto-recovery)..."
+    echo "8. Restarting worker (simulating auto-recovery)..."
     docker compose up -d training-worker
-    echo "Worker перезапущен."
+    echo "Worker restarted."
     echo ""
     
-    echo "9. Ждём завершения обучения (worker подхватит job)..."
+    echo "9. Waiting for training to complete (worker will pick up job)..."
     for i in $(seq 1 12); do
         STATUS=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
             "SELECT status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
         if [ "$STATUS" = "succeeded" ]; then
-            echo "  Job восстановлен и завершен за $((i*5))s ✅"
+            echo "  Job recovered and completed in $((i*5))s ✅"
             break
         fi
         if [ "$STATUS" = "failed" ]; then
@@ -243,36 +243,36 @@ run_step6() {
     done
     echo ""
     
-    echo "10. Проверка восстановления:"
+    echo "10. Recovery verification:"
     FINAL_STATUS=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
         "SELECT status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
-    echo "    Job статус: $FINAL_STATUS"
+    echo "    Job status: $FINAL_STATUS"
     
     MODEL_NAME=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
         "SELECT model_name FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
-    echo "    Модель в БД: ${MODEL_NAME:-NOT FOUND}"
+    echo "    Model in DB: ${MODEL_NAME:-NOT FOUND}"
     
     MODEL_PATH=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
         "SELECT model_path FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
-    echo "    Модель в MinIO: ${MODEL_PATH:-NOT FOUND}"
+    echo "    Model in MinIO: ${MODEL_PATH:-NOT FOUND}"
     echo ""
     
-    echo "--- ЧАСТЬ 3: Data Integrity ---"
+    echo "--- PART 3: Data Integrity ---"
     echo ""
-    echo "11. Проверка целостности данных:"
-    echo "    Количество датасетов:"
+    echo "11. Data integrity check:"
+    echo "    Dataset count:"
     docker compose exec -T postgres psql -U mlops -d mlops -t -c "SELECT count(*) FROM datasets;" 2>/dev/null
-    echo "    Количество моделей:"
+    echo "    Model count:"
     docker compose exec -T postgres psql -U mlops -d mlops -t -c "SELECT count(*) FROM trained_models;" 2>/dev/null
-    echo "    Количество jobs:"
+    echo "    Job count:"
     docker compose exec -T postgres psql -U mlops -d mlops -t -c "SELECT count(*) FROM jobs;" 2>/dev/null
-    echo "    Количество предсказаний:"
+    echo "    Prediction count:"
     docker compose exec -T postgres psql -U mlops -d mlops -t -c "SELECT count(*) FROM prediction_logs;" 2>/dev/null
     echo ""
     
-    echo "--- ЧАСТЬ 4: Final Verification ---"
+    echo "--- PART 4: Final Verification ---"
     echo ""
-    echo "12. Финальное предсказание (всё работает):"
+    echo "12. Final prediction (everything works):"
     RESULT=$(curl -s -X POST "$INFERENCE/predict?model_name=LogisticRegression&model_version=$MODEL_VER" \
         -H "Content-Type: application/json" \
         -d '{"age": 40, "monthly_spend": 200, "tenure_months": 36, "income": 70000, "credit_score": 750}')
@@ -284,13 +284,13 @@ run_step6() {
     echo "=========================================="
     echo ""
     if [ "$FINAL_STATUS" = "succeeded" ] && [ -n "$MODEL_NAME" ]; then
-        echo "  ✅ CRASH RECOVERY WORKS — job восстановился"
+        echo "  ✅ CRASH RECOVERY WORKS — job recovered"
     else
         echo "  ❌ CRASH RECOVERY FAILED — job status=$FINAL_STATUS"
     fi
-    echo "  ✅ Inference работает когда worker упал"
-    echo "  ✅ Данные целы (DB, MinIO, MLflow)"
-    echo "  ✅ Система полностью работоспособна"
+    echo "  ✅ Inference works when worker is down"
+    echo "  ✅ Data intact (DB, MinIO, MLflow)"
+    echo "  ✅ System fully operational"
     echo ""
     echo "👉 Show in Streamlit: $STREAMLIT → tab 'Jobs' → job $JOB_ID completed"
     echo ""
