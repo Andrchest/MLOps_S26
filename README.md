@@ -7,8 +7,6 @@
 
 **MLOps Platform** is a microservice-based platform automates the entire **ML lifecycle** within a single ecosystem. It integrates data management, training orchestration, and REST API serving into a unified MLOps workflow with built-in performance monitoring.
 
-![System Architecture](./assets/architecture_diagram.png) 
-
 ## Quick Start & Reproducibility
 
 ### 1. Prerequisites
