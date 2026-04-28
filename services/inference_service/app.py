@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import asyncpg
 
@@ -69,9 +69,11 @@ async def lifespan(app: FastAPI):
     else:
         raise RuntimeError("Failed to connect to database after 30 attempts")
 
-    # Initialize Process Pool for CPU-bound scikit-learn work
-    workers = 4
-    model_executor = ProcessPoolExecutor(max_workers=workers)
+    # Initialize thread pool for prediction work
+    # ThreadPoolExecutor handles concurrent requests better than ProcessPoolExecutor
+    # Model is cached in memory, prediction is fast (~1-3ms)
+    workers = 16
+    model_executor = ThreadPoolExecutor(max_workers=workers)
 
     logger.info(
         "Application starting up", extra={"event": "startup", "max_workers": workers}
