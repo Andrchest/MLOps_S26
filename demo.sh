@@ -227,29 +227,34 @@ run_step6() {
     echo ""
     
     echo "9. Ждём завершения обучения (worker подхватит job)..."
-    sleep 20
+    for i in $(seq 1 12); do
+        STATUS=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+            "SELECT status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
+        if [ "$STATUS" = "succeeded" ]; then
+            echo "  Job восстановлен и завершен за $((i*5))s ✅"
+            break
+        fi
+        if [ "$STATUS" = "failed" ]; then
+            echo "  Job failed ❌"
+            break
+        fi
+        echo "  ...$((i*5))s status=$STATUS"
+        sleep 5
+    done
     echo ""
     
     echo "10. Проверка восстановления:"
-    echo "    Job статус:"
-    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
-        "SELECT job_id, status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null
-    echo ""
+    FINAL_STATUS=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+        "SELECT status FROM jobs WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
+    echo "    Job статус: $FINAL_STATUS"
     
-    echo "    Модель в БД:"
-    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
-        "SELECT model_name, model_version FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null
-    echo ""
+    MODEL_NAME=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+        "SELECT model_name FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
+    echo "    Модель в БД: ${MODEL_NAME:-NOT FOUND}"
     
-    echo "    Модель в MinIO:"
-    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
-        "SELECT model_path FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n'
-    echo ""
-    echo ""
-    
-    echo "    MLflow run:"
-    docker compose exec -T postgres psql -U mlops -d mlops -t -c \
-        "SELECT parameters->>'model_type' as model_type, metrics->>'accuracy' as accuracy FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null
+    MODEL_PATH=$(docker compose exec -T postgres psql -U mlops -d mlops -t -c \
+        "SELECT model_path FROM trained_models WHERE job_id=$JOB_ID;" 2>/dev/null | tr -d ' \n')
+    echo "    Модель в MinIO: ${MODEL_PATH:-NOT FOUND}"
     echo ""
     
     echo "--- ЧАСТЬ 3: Data Integrity ---"
@@ -275,16 +280,19 @@ run_step6() {
     echo ""
     
     echo "=========================================="
-    echo "STEP 6 COMPLETE! ✅"
+    echo "STEP 6 RESULT"
     echo "=========================================="
     echo ""
-    echo "Результаты:"
+    if [ "$FINAL_STATUS" = "succeeded" ] && [ -n "$MODEL_NAME" ]; then
+        echo "  ✅ CRASH RECOVERY WORKS — job восстановился"
+    else
+        echo "  ❌ CRASH RECOVERY FAILED — job status=$FINAL_STATUS"
+    fi
     echo "  ✅ Inference работает когда worker упал"
-    echo "  ✅ Interrupted job восстановился после перезапуска worker"
     echo "  ✅ Данные целы (DB, MinIO, MLflow)"
     echo "  ✅ Система полностью работоспособна"
     echo ""
-    echo "👉 Show in Streamlit: $STREAMLIT → tab 'Jobs' → job $JOB_id completed"
+    echo "👉 Show in Streamlit: $STREAMLIT → tab 'Jobs' → job $JOB_ID completed"
     echo ""
     echo "Press Enter when ready to finish..."
     read

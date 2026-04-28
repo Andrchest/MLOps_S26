@@ -187,14 +187,14 @@ def main() -> None:
     # Simulate realistic training pipeline with multiple phases
     # This ensures we can observe training progress and test crash recovery
     print("Phase 1: Loading and preprocessing data...")
-    time.sleep(3)
+    time.sleep(10)
 
     df = load_csv(args.data)
     X, y = prepare_features_and_target(df, args.target)
     reference_profile = build_reference_profile(X)
 
     print("Phase 2: Training model...")
-    time.sleep(5)
+    time.sleep(10)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,

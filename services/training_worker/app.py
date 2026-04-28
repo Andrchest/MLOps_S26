@@ -13,6 +13,19 @@ except ModuleNotFoundError:
     from . import db
     from .worker import worker_loop
 
+
+async def _recover_orphan_jobs():
+    import logging
+    import sys
+
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+    logging.info("RECOVERY: checking for orphan jobs...")
+    try:
+        await db.recover_stuck_jobs()
+        logging.info("RECOVERY: done")
+    except Exception as exc:
+        logging.warning("RECOVERY: failed (%s) — will retry on next poll", exc)
+
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
 
@@ -33,6 +46,7 @@ async def lifespan(app: FastAPI):
                 host=host, port=port,
             )
             logging.info("LIFESPAN: DB pool created on attempt %d, starting worker", attempt + 1)
+            asyncio.create_task(_recover_orphan_jobs())
             asyncio.create_task(worker_loop())
             logging.info("LIFESPAN: worker task started")
             yield
