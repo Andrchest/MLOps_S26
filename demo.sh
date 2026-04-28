@@ -3,8 +3,6 @@
 # Usage: ./demo.sh [step0|step1|step2|step3|step4|step5|step6]
 # Default: runs from step0
 
-set -e
-
 STEP=${1:-step0}
 ORCH="http://localhost:8000"
 INFERENCE="http://localhost:8001"
