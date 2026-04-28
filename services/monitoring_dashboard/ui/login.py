@@ -47,7 +47,7 @@ def render_login():
 
         login_clicked = st.button(
             "Login",
-            use_container_width=True,
+            width="stretch",
             type="primary",
         )
 

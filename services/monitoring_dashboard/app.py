@@ -72,7 +72,7 @@ with right_col:
             st.markdown("**Account**")
             st.caption(st.session_state.get("username", "admin"))
 
-            if st.button("Logout", use_container_width=True):
+            if st.button("Logout", width="stretch"):
                 st.session_state.authenticated = False
                 st.rerun()
 

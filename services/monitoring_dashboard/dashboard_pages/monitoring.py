@@ -122,7 +122,7 @@ def render_monitoring_page():
 
             elif len(trend_df) < 2:
                 st.info("Not enough data points to render a trend chart yet.")
-                st.dataframe(trend_df, use_container_width=True, hide_index=True)
+                st.dataframe(trend_df, width="stretch", hide_index=True)
 
             else:
                 trend_df = trend_df.copy()
@@ -130,7 +130,7 @@ def render_monitoring_page():
                 trend_df = trend_df.sort_values("day")
                 trend_df = trend_df.set_index("day")
 
-                st.line_chart(trend_df, use_container_width=True)
+                st.line_chart(trend_df, width="stretch")
 
         else:
             st.error(prediction_trend["error"])

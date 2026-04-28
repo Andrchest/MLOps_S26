@@ -45,7 +45,7 @@ def render_table(result, title, empty_message):
         return
 
     df = apply_status_badges(df)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def render_metric(label, value):

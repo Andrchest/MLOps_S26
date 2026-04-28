@@ -110,7 +110,7 @@ def render_models_page():
             data=csv,
             file_name="models.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
 
     st.markdown(

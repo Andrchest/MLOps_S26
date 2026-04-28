@@ -324,9 +324,20 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
             "Transfer prediction to ProcessPool",
             extra={"request_id": request_id, "model_name": model_name},
         )
-        label, score = await loop.run_in_executor(
-            model_executor, _run_prediction, model_bytes, input_data.model_dump()
-        )
+        try:
+            label, score = await asyncio.wait_for(
+                loop.run_in_executor(model_executor, _run_prediction, model_bytes, input_data.model_dump()),
+                timeout=30.0,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Prediction timed out after 30s (all workers busy)",
+                extra={"request_id": request_id, "model_name": model_name},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service temporarily busy. Please try again.",
+            )
 
         prediction = Prediction(label=label, score=score)
         status_msg = "success"
