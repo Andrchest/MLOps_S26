@@ -379,6 +379,20 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
         extra={"event": "prediction_completed", **response.model_dump(mode="json")},
     )
 
+    # Log prediction to database (non-blocking)
+    asyncio.create_task(
+        _log_prediction(
+            request_id=response.request_id,
+            timestamp=response.timestamp,
+            model_name=model_name,
+            model_version=model_version,
+            input_data=input_data.model_dump(),
+            prediction=response.prediction.model_dump(),
+            latency_ms=response.latency_ms,
+            status=response.status,
+        )
+    )
+
     # Evaluate drift in background (non-blocking)
     asyncio.create_task(
         evaluate_drift(
@@ -390,6 +404,23 @@ async def predict(input_data: InputData, model_name: str, model_version: str):
     )
 
     return response
+
+
+async def _log_prediction(request_id, timestamp, model_name, model_version, input_data, prediction, latency_ms, status):
+    """Log prediction to database for monitoring dashboard."""
+    if DB_POOL is None:
+        return
+    try:
+        async with DB_POOL.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO prediction_logs
+                   (request_id, timestamp, model_name, model_version, input_data, prediction, latency_ms, status)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                request_id, timestamp, model_name, model_version,
+                json.dumps(input_data), json.dumps(prediction), latency_ms, status,
+            )
+    except Exception as exc:
+        logger.warning("Failed to log prediction: %s", exc)
 
 
 @app.get("/drift/visualization")
